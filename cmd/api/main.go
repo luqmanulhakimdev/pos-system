@@ -51,6 +51,7 @@ func run() error {
 			application.NewCancelOrder(postgres.NewCancellationStore(pool)),
 			application.NewRefunds(postgres.NewRefundStore(pool), payment.NewMockProvider()),
 			application.NewSalesReports(postgres.NewSalesReportStore(pool)),
+			application.NewOrderQueries(postgres.NewOrderQueryStore(pool)),
 		),
 		ReadHeaderTimeout: 5 * time.Second,
 	}

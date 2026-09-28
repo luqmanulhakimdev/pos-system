@@ -15,7 +15,7 @@ import (
 )
 
 // NewRouter builds the HTTP surface exposed by the service.
-func NewRouter(checkDatabase func(context.Context) error, auth *application.AuthService, payments *application.Payments, checkout *application.Checkout, catalog *application.Catalog, inventory *application.InventoryService, customers *application.Customers, cancelOrder *application.CancelOrder, refunds *application.Refunds, salesReports *application.SalesReports) http.Handler {
+func NewRouter(checkDatabase func(context.Context) error, auth *application.AuthService, payments *application.Payments, checkout *application.Checkout, catalog *application.Catalog, inventory *application.InventoryService, customers *application.Customers, cancelOrder *application.CancelOrder, refunds *application.Refunds, salesReports *application.SalesReports, orders *application.OrderQueries) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -215,6 +215,54 @@ func NewRouter(checkDatabase func(context.Context) error, auth *application.Auth
 					return
 				}
 				writeJSON(w, http.StatusOK, report)
+			})))
+		}
+		if orders != nil {
+			mux.Handle("GET /v1/orders", RequirePermission(auth, "order.read", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				limit, offset := 50, 0
+				if raw := r.URL.Query().Get("limit"); raw != "" {
+					n, err := strconv.Atoi(raw)
+					if err != nil {
+						writeError(w, http.StatusBadRequest, "invalid limit")
+						return
+					}
+					limit = n
+				}
+				if raw := r.URL.Query().Get("offset"); raw != "" {
+					n, err := strconv.Atoi(raw)
+					if err != nil {
+						writeError(w, http.StatusBadRequest, "invalid offset")
+						return
+					}
+					offset = n
+				}
+				items, err := orders.List(r.Context(), application.OrderListFilter{Status: domain.OrderStatus(r.URL.Query().Get("status")), Search: r.URL.Query().Get("search"), Limit: limit, Offset: offset})
+				if errors.Is(err, application.ErrInvalidCheckout) {
+					writeError(w, http.StatusBadRequest, "invalid order filters")
+					return
+				}
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, "could not load orders")
+					return
+				}
+				writeJSON(w, http.StatusOK, items)
+			})))
+			mux.Handle("GET /v1/orders/{orderID}", RequirePermission(auth, "order.read", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				id, err := strconv.ParseInt(r.PathValue("orderID"), 10, 64)
+				if err != nil || id <= 0 {
+					writeError(w, http.StatusBadRequest, "invalid order id")
+					return
+				}
+				order, err := orders.Get(r.Context(), id)
+				if errors.Is(err, application.ErrOrderNotFound) {
+					writeError(w, http.StatusNotFound, "order not found")
+					return
+				}
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, "could not load order")
+					return
+				}
+				writeJSON(w, http.StatusOK, order)
 			})))
 		}
 		if catalog != nil {

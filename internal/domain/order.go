@@ -23,13 +23,13 @@ const (
 )
 
 type OrderItem struct {
-	ProductID      int64
-	ProductName    string
-	SKUSnapshot    string
-	Quantity       int64
-	UnitPriceMinor int64
-	LineTotalMinor int64
-	Currency       string
+	ProductID      int64  `json:"product_id"`
+	ProductName    string `json:"product_name"`
+	SKUSnapshot    string `json:"sku"`
+	Quantity       int64  `json:"quantity"`
+	UnitPriceMinor int64  `json:"unit_price_minor"`
+	LineTotalMinor int64  `json:"line_total_minor"`
+	Currency       string `json:"currency"`
 }
 
 func NewOrderItem(productID int64, name, sku string, quantity, unitPriceMinor int64, currency string) (OrderItem, error) {
