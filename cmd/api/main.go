@@ -10,18 +10,35 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/luqmanulhakimdev/pos-system/internal/infrastructure/postgres"
 	httpapi "github.com/luqmanulhakimdev/pos-system/internal/interfaces/http"
 )
 
 func main() {
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run() error {
+	startupCtx, cancelStartup := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancelStartup()
+	pool, err := postgres.NewPool(startupCtx, os.Getenv("DATABASE_URL"))
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+	if err := postgres.ApplyMigrations(startupCtx, pool); err != nil {
+		return err
+	}
+
 	addr := os.Getenv("HTTP_ADDR")
 	if addr == "" {
 		addr = ":8080"
 	}
-
 	server := &http.Server{
 		Addr:              addr,
-		Handler:           httpapi.NewRouter(),
+		Handler:           httpapi.NewRouter(pool.Ping),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
@@ -38,6 +55,7 @@ func main() {
 
 	log.Printf("http server listening on %s", addr)
 	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		log.Fatal(err)
+		return err
 	}
+	return nil
 }

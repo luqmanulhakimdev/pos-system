@@ -1,10 +1,5 @@
 # Database migrations
 
-Migrations are ordered SQL files with `.up.sql` and `.down.sql` suffixes. The initial schema is `000001_initial_schema`. Apply the up migration to the local Compose database from the repository root:
+Migrations are ordered SQL files with `.up.sql` and `.down.sql` suffixes. The Go service embeds the up files, records applied versions in `schema_migrations`, and applies pending migrations at startup inside PostgreSQL transactions. A PostgreSQL advisory lock serializes migration startup across instances.
 
-```sh
-docker compose up -d postgres
-docker compose exec -T postgres psql -U app -d pos_system < migrations/000001_initial_schema.up.sql
-```
-
-Rollback the initial migration with the matching `.down.sql` file. Apply each migration once and in numeric order. A versioned migration runner and automated migration integration tests will be introduced with the database adapters.
+For manual local inspection, start PostgreSQL with `docker compose up -d postgres` and inspect the schema with `docker compose exec postgres psql -U app -d pos_system`. Apply an up script manually only when running migrations outside the application. Rollback scripts are intended for controlled operator use; the service never runs down migrations automatically.
