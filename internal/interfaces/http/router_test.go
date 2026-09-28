@@ -45,6 +45,26 @@ type customerHTTPStore struct {
 	customer  application.Customer
 }
 
+type userManagementHTTPStore struct {
+	createdBy int64
+	created   bool
+}
+
+func (s *userManagementHTTPStore) CreateManagedUser(_ context.Context, actorID int64, email, displayName string, _ []byte, role string) (application.ManagedUser, error) {
+	s.createdBy = actorID
+	s.created = true
+	return application.ManagedUser{ID: 2, Email: email, DisplayName: displayName, Active: true, Roles: []string{role}}, nil
+}
+func (*userManagementHTTPStore) ListManagedUsers(context.Context) ([]application.ManagedUser, error) {
+	return []application.ManagedUser{}, nil
+}
+func (*userManagementHTTPStore) SetManagedUserRole(context.Context, int64, int64, string) error {
+	return nil
+}
+func (*userManagementHTTPStore) DeactivateManagedUser(context.Context, int64, int64) error {
+	return nil
+}
+
 func (s *customerHTTPStore) CreateCustomer(_ context.Context, actorID int64, customer application.Customer) (application.Customer, error) {
 	s.createdBy = actorID
 	customer.ID = 9
@@ -66,7 +86,7 @@ func TestHealthz(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 
-	NewRouter(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil).ServeHTTP(recorder, request)
+	NewRouter(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil).ServeHTTP(recorder, request)
 
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
@@ -78,7 +98,7 @@ func TestHealthz(t *testing.T) {
 
 func TestLoginMeAndLogout(t *testing.T) {
 	store := &testAuthStore{}
-	router := NewRouter(func(context.Context) error { return nil }, application.NewAuthService(store, time.Hour), nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	router := NewRouter(func(context.Context) error { return nil }, application.NewAuthService(store, time.Hour), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	login := httptest.NewRequest(http.MethodPost, "/v1/auth/login", strings.NewReader(`{"email":"admin@example.com","password":"password-strong"}`))
 	loginRecorder := httptest.NewRecorder()
 	router.ServeHTTP(loginRecorder, login)
@@ -106,7 +126,7 @@ func TestLoginMeAndLogout(t *testing.T) {
 }
 
 func TestAuthenticatedAndPermissionMiddlewareReject(t *testing.T) {
-	router := NewRouter(nil, application.NewAuthService(&testAuthStore{}, time.Hour), nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	router := NewRouter(nil, application.NewAuthService(&testAuthStore{}, time.Hour), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	request := httptest.NewRequest(http.MethodGet, "/v1/me", nil)
 	recorder := httptest.NewRecorder()
 	router.ServeHTTP(recorder, request)
@@ -130,7 +150,7 @@ func TestHealthzRejectsOtherMethods(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/healthz", nil)
 
-	NewRouter(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil).ServeHTTP(recorder, request)
+	NewRouter(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil).ServeHTTP(recorder, request)
 
 	if recorder.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusMethodNotAllowed)
@@ -151,7 +171,7 @@ func TestReadinessChecksDatabase(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			recorder := httptest.NewRecorder()
 			request := httptest.NewRequest(http.MethodGet, "/readyz", nil)
-			NewRouter(tt.check, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil).ServeHTTP(recorder, request)
+			NewRouter(tt.check, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil).ServeHTTP(recorder, request)
 			if recorder.Code != tt.want {
 				t.Fatalf("status = %d, want %d", recorder.Code, tt.want)
 			}
@@ -164,7 +184,7 @@ func TestCustomerCreationRequiresPermissionAndPassesActor(t *testing.T) {
 	hash, _ := application.HashSessionToken(token)
 	store := &testAuthStore{hash: hash, permissions: []string{"customer.create"}}
 	customerStore := &customerHTTPStore{}
-	router := NewRouter(nil, application.NewAuthService(store, time.Hour), nil, nil, nil, nil, application.NewCustomers(customerStore), nil, nil, nil, nil)
+	router := NewRouter(nil, application.NewAuthService(store, time.Hour), nil, nil, nil, nil, application.NewCustomers(customerStore), nil, nil, nil, nil, nil)
 	request := httptest.NewRequest(http.MethodPost, "/v1/customers", strings.NewReader(`{"name":"Ana","email":"ANA@example.com"}`))
 	request.Header.Set("Authorization", "Bearer "+token)
 	request.Header.Set("Content-Type", "application/json")
@@ -181,5 +201,33 @@ func TestCustomerCreationRequiresPermissionAndPassesActor(t *testing.T) {
 	router.ServeHTTP(recorder, request)
 	if recorder.Code != http.StatusForbidden {
 		t.Fatalf("unauthorized permission status=%d", recorder.Code)
+	}
+}
+
+func TestUserManagementRequiresPermissionAndCreatesUser(t *testing.T) {
+	token := "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+	hash, _ := application.HashSessionToken(token)
+	authStore := &testAuthStore{hash: hash, permissions: []string{"user.manage"}}
+	userStore := &userManagementHTTPStore{}
+	router := NewRouter(nil, application.NewAuthService(authStore, time.Hour), nil, nil, nil, nil, nil, nil, nil, nil, nil, application.NewUserManagement(userStore))
+	request := httptest.NewRequest(http.MethodPost, "/v1/users", strings.NewReader(`{"email":"staff@example.com","display_name":"Staff","password":"a-long-password-123","role":"cashier"}`))
+	request.Header.Set("Authorization", "Bearer "+token)
+	request.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusCreated || userStore.createdBy != 1 || !userStore.created {
+		t.Fatalf("create status=%d actor=%d created=%v body=%s", recorder.Code, userStore.createdBy, userStore.created, recorder.Body.String())
+	}
+	if strings.Contains(recorder.Body.String(), "password") {
+		t.Fatalf("response exposed password/hash: %s", recorder.Body.String())
+	}
+	authStore.permissions = []string{"orders.read"}
+	request = httptest.NewRequest(http.MethodPost, "/v1/users", strings.NewReader(`{"email":"other@example.com","display_name":"Other","password":"a-long-password-123","role":"cashier"}`))
+	request.Header.Set("Authorization", "Bearer "+token)
+	request.Header.Set("Content-Type", "application/json")
+	recorder = httptest.NewRecorder()
+	router.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusForbidden {
+		t.Fatalf("missing user.manage status=%d, want forbidden", recorder.Code)
 	}
 }

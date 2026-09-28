@@ -13,6 +13,7 @@ Pragmatic hexagonal architecture separates domain rules, application use cases, 
 - Seeded roles and granular permissions
 - Transactional checkout and stock adjustment use cases, with stock movements, price snapshots, server-calculated totals, and audit records
 - Hashed bearer sessions, one-time administrator bootstrap, and database-backed permission middleware
+- Admin-only staff management with bcrypt password hashes, role assignment, session revocation, and last-admin protection
 - Order payment orchestration through a deterministic mock provider with retry-safe idempotency keys
 - Full paid-order refunds with persistent reservations, stable provider idempotency, and audit records
 - Permission-protected sales summary reports grouped by currency and date range

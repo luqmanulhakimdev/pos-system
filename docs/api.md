@@ -7,6 +7,7 @@ Base URL: `http://localhost:8080`.
 - `POST /v1/auth/login` accepts an email and password and returns a short-lived bearer token. Invalid credentials return `401`.
 - `GET /v1/me` requires a bearer token and returns the account email and its current permission names.
 - `POST /v1/auth/logout` requires a bearer token and revokes that session. A revoked token returns `401` on subsequent requests.
+- `/v1/users` routes require `user.manage`: `GET` lists users and roles, `POST` creates a staff account, `PUT /v1/users/{userID}/role` replaces its non-admin role, and `DELETE /v1/users/{userID}` deactivates it and revokes sessions. Passwords are bcrypt-hashed; the bootstrap command remains the only way to create an administrator, and the last active administrator cannot be deactivated.
 - `POST /v1/orders/{orderID}/payments` charges a payable order through the configured mock provider; it requires `payment.create` and uses a stable provider idempotency key for retries. It returns `409` for orders that cannot be paid and `502` when the provider is unavailable.
 - `POST /v1/orders/checkout` creates a pending order for the authenticated cashier, derives prices from PostgreSQL, and atomically records order items, stock movements, inventory updates, and audit data. It requires `order.create`.
 - `GET /v1/orders` and `GET /v1/orders/{orderID}` require `order.read`; the detail response uses checkout-time item name, SKU, and unit-price snapshots.

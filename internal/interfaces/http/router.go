@@ -15,7 +15,7 @@ import (
 )
 
 // NewRouter builds the HTTP surface exposed by the service.
-func NewRouter(checkDatabase func(context.Context) error, auth *application.AuthService, payments *application.Payments, checkout *application.Checkout, catalog *application.Catalog, inventory *application.InventoryService, customers *application.Customers, cancelOrder *application.CancelOrder, refunds *application.Refunds, salesReports *application.SalesReports, orders *application.OrderQueries) http.Handler {
+func NewRouter(checkDatabase func(context.Context) error, auth *application.AuthService, payments *application.Payments, checkout *application.Checkout, catalog *application.Catalog, inventory *application.InventoryService, customers *application.Customers, cancelOrder *application.CancelOrder, refunds *application.Refunds, salesReports *application.SalesReports, orders *application.OrderQueries, userManagement *application.UserManagement) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -65,6 +65,94 @@ func NewRouter(checkDatabase func(context.Context) error, auth *application.Auth
 			}
 			w.WriteHeader(http.StatusNoContent)
 		})))
+		if userManagement != nil {
+			mux.Handle("GET /v1/users", RequirePermission(auth, "user.manage", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				users, err := userManagement.List(r.Context())
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, "could not load users")
+					return
+				}
+				writeJSON(w, http.StatusOK, users)
+			})))
+			mux.Handle("POST /v1/users", RequirePermission(auth, "user.manage", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var input application.CreateManagedUserRequest
+				if err := decodeJSON(w, r, &input); err != nil {
+					writeError(w, http.StatusBadRequest, "invalid request")
+					return
+				}
+				user, err := userManagement.Create(r.Context(), UserFromContext(r.Context()).ID, input)
+				if errors.Is(err, application.ErrInvalidManagedUser) || errors.Is(err, application.ErrInvalidManagedRole) {
+					writeError(w, http.StatusBadRequest, "invalid user details or role")
+					return
+				}
+				if errors.Is(err, application.ErrDuplicateUserEmail) {
+					writeError(w, http.StatusConflict, "user email already exists")
+					return
+				}
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, "could not create user")
+					return
+				}
+				writeJSON(w, http.StatusCreated, user)
+			})))
+			mux.Handle("PUT /v1/users/{userID}/role", RequirePermission(auth, "user.manage", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				userID, err := strconv.ParseInt(r.PathValue("userID"), 10, 64)
+				if err != nil || userID <= 0 {
+					writeError(w, http.StatusBadRequest, "invalid user id")
+					return
+				}
+				var input struct {
+					Role string `json:"role"`
+				}
+				if err := decodeJSON(w, r, &input); err != nil {
+					writeError(w, http.StatusBadRequest, "invalid request")
+					return
+				}
+				err = userManagement.SetRole(r.Context(), UserFromContext(r.Context()).ID, userID, input.Role)
+				if errors.Is(err, application.ErrInvalidManagedRole) {
+					writeError(w, http.StatusBadRequest, "invalid role")
+					return
+				}
+				if errors.Is(err, application.ErrManagedUserNotFound) {
+					writeError(w, http.StatusNotFound, "user not found")
+					return
+				}
+				if errors.Is(err, application.ErrManagedAdminImmutable) {
+					writeError(w, http.StatusConflict, "administrator role cannot be changed through this API")
+					return
+				}
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, "could not change user role")
+					return
+				}
+				w.WriteHeader(http.StatusNoContent)
+			})))
+			mux.Handle("DELETE /v1/users/{userID}", RequirePermission(auth, "user.manage", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				userID, err := strconv.ParseInt(r.PathValue("userID"), 10, 64)
+				if err != nil || userID <= 0 {
+					writeError(w, http.StatusBadRequest, "invalid user id")
+					return
+				}
+				err = userManagement.Deactivate(r.Context(), UserFromContext(r.Context()).ID, userID)
+				if errors.Is(err, application.ErrManagedUserNotFound) {
+					writeError(w, http.StatusNotFound, "user not found")
+					return
+				}
+				if errors.Is(err, application.ErrCannotDeactivateSelf) {
+					writeError(w, http.StatusConflict, "cannot deactivate the current user")
+					return
+				}
+				if errors.Is(err, application.ErrLastActiveAdmin) {
+					writeError(w, http.StatusConflict, "cannot deactivate the last active administrator")
+					return
+				}
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, "could not deactivate user")
+					return
+				}
+				w.WriteHeader(http.StatusNoContent)
+			})))
+		}
 		if payments != nil {
 			mux.Handle("POST /v1/orders/{orderID}/payments", RequirePermission(auth, "payment.create", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				orderID, err := strconv.ParseInt(r.PathValue("orderID"), 10, 64)

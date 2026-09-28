@@ -286,6 +286,77 @@ paths:
         '401': { description: Missing or invalid bearer token }
         '403': { description: User lacks product.delete permission }
         '404': { description: Product not found }
+  /v1/users:
+    get:
+      operationId: listUsers
+      summary: List users and assigned roles
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: User records without password hashes }
+        '401': { description: Missing or invalid bearer token }
+        '403': { description: User lacks user.manage permission }
+    post:
+      operationId: createUser
+      summary: Create a staff account and assign one role
+      description: The initial administrator role is only assigned by the bootstrap command and cannot be created or changed through this API.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email, display_name, password, role]
+              properties:
+                email: { type: string, format: email, maxLength: 254 }
+                display_name: { type: string, minLength: 1, maxLength: 120 }
+                password: { type: string, minLength: 12, maxLength: 72 }
+                role: { type: string, enum: [manager, cashier, inventory_staff] }
+      responses:
+        '201': { description: User created with password hashed using bcrypt }
+        '400': { description: Invalid user or role }
+        '401': { description: Missing or invalid bearer token }
+        '403': { description: User lacks user.manage permission }
+        '409': { description: Email already exists }
+  /v1/users/{userID}/role:
+    put:
+      operationId: setUserRole
+      summary: Replace the role assigned to an active user
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: userID, in: path, required: true, schema: { type: integer, format: int64, minimum: 1 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [role]
+              properties:
+                role: { type: string, enum: [manager, cashier, inventory_staff] }
+      responses:
+        '204': { description: Role replaced }
+        '400': { description: Invalid user identifier or role }
+        '401': { description: Missing or invalid bearer token }
+        '403': { description: User lacks user.manage permission }
+        '404': { description: Active user not found }
+        '409': { description: Administrator role cannot be changed through this API }
+  /v1/users/{userID}:
+    delete:
+      operationId: deactivateUser
+      summary: Deactivate a user and revoke active sessions
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: userID, in: path, required: true, schema: { type: integer, format: int64, minimum: 1 } }
+      responses:
+        '204': { description: User deactivated and sessions revoked }
+        '400': { description: Invalid user identifier }
+        '401': { description: Missing or invalid bearer token }
+        '403': { description: User lacks user.manage permission }
+        '404': { description: Active user not found }
+        '409': { description: Cannot deactivate yourself or the last active administrator }
   /v1/customers:
     get:
       operationId: listCustomers
