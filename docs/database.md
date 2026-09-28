@@ -1,6 +1,6 @@
 # Database design
 
-PostgreSQL is the system of record. The first migration creates users, roles, permissions, user-role and role-permission assignments, categories, products, inventory, customers, orders, order items, stock movements, payments, and audit logs. See `migrations/000001_initial_schema.up.sql` for exact columns, constraints, and indexes.
+PostgreSQL is the system of record. The first migration creates users, roles, permissions, user-role and role-permission assignments, categories, products, inventory, customers, orders, order items, stock movements, payments, and audit logs. It seeds the four standard roles and granular permission catalog; no default user or password is created. See `migrations/000001_initial_schema.up.sql` for exact columns, constraints, and indexes.
 
 Important constraints include unique user email and product SKU, nonnegative prices and stock, positive order-item quantities, explicit order and payment state checks, order item price snapshots, and foreign keys that prevent deleting records referenced by financial history. Partial indexes support optional customer email/phone and audit/order lookup patterns.
 

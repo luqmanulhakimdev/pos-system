@@ -50,7 +50,7 @@ CREATE TABLE products (
     name TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
     price_minor BIGINT NOT NULL CHECK (price_minor >= 0),
-    currency CHAR(3) NOT NULL DEFAULT 'IDR',
+    currency CHAR(3) NOT NULL DEFAULT 'IDR' CHECK (currency ~ '^[A-Z]{3}$'),
     active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -84,7 +84,7 @@ CREATE TABLE orders (
     status TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING','CONFIRMED','PAID','CANCELLED','REFUNDED')),
     subtotal_minor BIGINT NOT NULL CHECK (subtotal_minor >= 0),
     total_minor BIGINT NOT NULL CHECK (total_minor >= 0),
-    currency CHAR(3) NOT NULL,
+    currency CHAR(3) NOT NULL CHECK (currency ~ '^[A-Z]{3}$'),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     CHECK (total_minor = subtotal_minor)
@@ -101,7 +101,7 @@ CREATE TABLE order_items (
     quantity BIGINT NOT NULL CHECK (quantity > 0),
     unit_price_minor BIGINT NOT NULL CHECK (unit_price_minor >= 0),
     line_total_minor BIGINT NOT NULL CHECK (line_total_minor >= 0),
-    currency CHAR(3) NOT NULL,
+    currency CHAR(3) NOT NULL CHECK (currency ~ '^[A-Z]{3}$'),
     CHECK (line_total_minor = quantity * unit_price_minor),
     UNIQUE (order_id, product_id)
 );
@@ -127,7 +127,7 @@ CREATE TABLE payments (
     provider_reference TEXT,
     status TEXT NOT NULL CHECK (status IN ('PENDING','AUTHORIZED','PAID','FAILED','CANCELLED','REFUNDED')),
     amount_minor BIGINT NOT NULL CHECK (amount_minor >= 0),
-    currency CHAR(3) NOT NULL,
+    currency CHAR(3) NOT NULL CHECK (currency ~ '^[A-Z]{3}$'),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     UNIQUE (provider, provider_reference)
@@ -145,3 +145,47 @@ CREATE TABLE audit_logs (
 );
 CREATE INDEX audit_logs_entity_created_idx ON audit_logs(entity_type, entity_id, created_at DESC);
 CREATE INDEX audit_logs_actor_created_idx ON audit_logs(actor_user_id, created_at DESC);
+
+INSERT INTO roles (name, description) VALUES
+    ('admin', 'Full access to the point of sale'),
+    ('manager', 'Manage sales, catalog, inventory, and reports'),
+    ('cashier', 'Read catalog and process sales'),
+    ('inventory_staff', 'Read catalog and adjust inventory');
+
+INSERT INTO permissions (name, description) VALUES
+    ('product.read', 'View products'),
+    ('product.create', 'Create products'),
+    ('product.update', 'Update products'),
+    ('product.delete', 'Deactivate products'),
+    ('inventory.read', 'View inventory'),
+    ('inventory.adjust', 'Adjust inventory'),
+    ('order.create', 'Create orders'),
+    ('order.read', 'View orders'),
+    ('order.cancel', 'Cancel orders'),
+    ('payment.create', 'Create payments'),
+    ('payment.refund', 'Refund payments'),
+    ('report.read', 'View reports'),
+    ('user.manage', 'Manage user accounts and roles');
+
+INSERT INTO role_permissions (role_id, permission_id)
+SELECT r.id, p.id FROM roles r CROSS JOIN permissions p WHERE r.name = 'admin';
+
+INSERT INTO role_permissions (role_id, permission_id)
+SELECT r.id, p.id FROM roles r CROSS JOIN permissions p
+WHERE r.name = 'manager' AND p.name = ANY(ARRAY[
+    'product.read', 'product.create', 'product.update', 'product.delete',
+    'inventory.read', 'inventory.adjust', 'order.create', 'order.read',
+    'order.cancel', 'payment.create', 'payment.refund', 'report.read'
+]);
+
+INSERT INTO role_permissions (role_id, permission_id)
+SELECT r.id, p.id FROM roles r CROSS JOIN permissions p
+WHERE r.name = 'cashier' AND p.name = ANY(ARRAY[
+    'product.read', 'inventory.read', 'order.create', 'order.read', 'payment.create'
+]);
+
+INSERT INTO role_permissions (role_id, permission_id)
+SELECT r.id, p.id FROM roles r CROSS JOIN permissions p
+WHERE r.name = 'inventory_staff' AND p.name = ANY(ARRAY[
+    'product.read', 'product.update', 'inventory.read', 'inventory.adjust'
+]);
