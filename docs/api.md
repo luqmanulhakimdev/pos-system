@@ -11,6 +11,7 @@ Base URL: `http://localhost:8080`.
 - `POST /v1/orders/checkout` creates a pending order for the authenticated cashier, derives prices from PostgreSQL, and atomically records order items, stock movements, inventory updates, and audit data. It requires `order.create`.
 - `GET /v1/categories` and `GET /v1/products` require `product.read`; product listing supports `search`, `category_id`, `limit`, and `offset` filters.
 - `POST /v1/categories` and `POST /v1/products` require `product.create`. Product prices use integer minor units and default to IDR if currency is omitted.
+- `GET /v1/customers` requires `customer.read` and supports bounded search and pagination. `POST /v1/customers` requires `customer.create`, a name, and at least one of email or phone. Email addresses are normalized and unique; creation and its audit record commit together.
 - Creating a product also creates a zero-quantity inventory record. `GET /v1/inventory/{productID}` requires `inventory.read`; `POST /v1/inventory/{productID}/adjustments` requires `inventory.adjust` and records a stock movement and audit event in the same transaction.
 
 Authenticated routes load current role permissions from PostgreSQL on each request. The `RequirePermission` middleware is available for business handlers; permission names are seeded in the initial migration (for example `order.read` and `inventory.adjust`).

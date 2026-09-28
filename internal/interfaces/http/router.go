@@ -15,7 +15,7 @@ import (
 )
 
 // NewRouter builds the HTTP surface exposed by the service.
-func NewRouter(checkDatabase func(context.Context) error, auth *application.AuthService, payments *application.Payments, checkout *application.Checkout, catalog *application.Catalog, inventory *application.InventoryService) http.Handler {
+func NewRouter(checkDatabase func(context.Context) error, auth *application.AuthService, payments *application.Payments, checkout *application.Checkout, catalog *application.Catalog, inventory *application.InventoryService, customers *application.Customers) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -275,6 +275,62 @@ func NewRouter(checkDatabase func(context.Context) error, auth *application.Auth
 					return
 				}
 				writeJSON(w, http.StatusOK, stock)
+			})))
+		}
+		if customers != nil {
+			mux.Handle("GET /v1/customers", RequirePermission(auth, "customer.read", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				limit, offset := 50, 0
+				if raw := r.URL.Query().Get("limit"); raw != "" {
+					n, err := strconv.Atoi(raw)
+					if err != nil {
+						writeError(w, http.StatusBadRequest, "invalid limit")
+						return
+					}
+					limit = n
+				}
+				if raw := r.URL.Query().Get("offset"); raw != "" {
+					n, err := strconv.Atoi(raw)
+					if err != nil {
+						writeError(w, http.StatusBadRequest, "invalid offset")
+						return
+					}
+					offset = n
+				}
+				items, err := customers.List(r.Context(), application.CustomerFilter{Search: r.URL.Query().Get("search"), Limit: limit, Offset: offset})
+				if errors.Is(err, application.ErrInvalidCustomer) {
+					writeError(w, http.StatusBadRequest, "invalid customer filters")
+					return
+				}
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, "could not load customers")
+					return
+				}
+				writeJSON(w, http.StatusOK, items)
+			})))
+			mux.Handle("POST /v1/customers", RequirePermission(auth, "customer.create", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var input struct {
+					Name  string `json:"name"`
+					Email string `json:"email"`
+					Phone string `json:"phone"`
+				}
+				if err := decodeJSON(w, r, &input); err != nil {
+					writeError(w, http.StatusBadRequest, "invalid request")
+					return
+				}
+				customer, err := customers.Create(r.Context(), UserFromContext(r.Context()).ID, application.Customer{Name: input.Name, Email: input.Email, Phone: input.Phone})
+				if errors.Is(err, application.ErrInvalidCustomer) {
+					writeError(w, http.StatusBadRequest, "invalid customer")
+					return
+				}
+				if errors.Is(err, application.ErrDuplicateCustomerEmail) {
+					writeError(w, http.StatusConflict, "customer email already exists")
+					return
+				}
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, "could not create customer")
+					return
+				}
+				writeJSON(w, http.StatusCreated, customer)
 			})))
 		}
 	}

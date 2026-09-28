@@ -167,6 +167,45 @@ paths:
         '401': { description: Missing or invalid bearer token }
         '403': { description: User lacks product.create permission }
         '409': { description: SKU already exists }
+  /v1/customers:
+    get:
+      operationId: listCustomers
+      summary: Search and list customers
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: search, in: query, schema: { type: string, maxLength: 120 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+      responses:
+        '200': { description: Customers matching the filters }
+        '400': { description: Invalid search or pagination values }
+        '401': { description: Missing or invalid bearer token }
+        '403': { description: User lacks customer.read permission }
+    post:
+      operationId: createCustomer
+      summary: Create a customer record
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name]
+              anyOf:
+                - required: [email]
+                - required: [phone]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 120 }
+                email: { type: string, format: email, maxLength: 254 }
+                phone: { type: string, maxLength: 32 }
+      responses:
+        '201': { description: Customer created }
+        '400': { description: Invalid customer details }
+        '401': { description: Missing or invalid bearer token }
+        '403': { description: User lacks customer.create permission }
+        '409': { description: Email is already registered }
   /v1/inventory/{productID}:
     get:
       operationId: getInventory
