@@ -62,12 +62,26 @@ func (s *RefundStore) PrepareRefund(ctx context.Context, orderID, actorID int64,
 		return application.Refund{}, "", false, application.ErrRefundInProgress
 	}
 	var paymentReference string
-	if err := tx.QueryRow(ctx, `SELECT id,provider_reference,amount_minor,currency FROM payments WHERE order_id=$1 AND status='PAID' ORDER BY id DESC LIMIT 1 FOR UPDATE`, orderID).Scan(&refund.PaymentID, &paymentReference, &refund.AmountMinor, &refund.Currency); errors.Is(err, pgx.ErrNoRows) {
+	var capturedAmount int64
+	if err := tx.QueryRow(ctx, `SELECT id,provider_reference,amount_minor,currency FROM payments WHERE order_id=$1 AND status='PAID' ORDER BY id DESC LIMIT 1 FOR UPDATE`, orderID).Scan(&refund.PaymentID, &paymentReference, &capturedAmount, &refund.Currency); errors.Is(err, pgx.ErrNoRows) {
 		return application.Refund{}, "", false, application.ErrOrderNotRefundable
 	} else if err != nil {
 		return application.Refund{}, "", false, fmt.Errorf("load paid payment: %w", err)
 	}
-	if paymentReference == "" || refund.AmountMinor <= 0 {
+	if paymentReference == "" || capturedAmount <= 0 {
+		return application.Refund{}, "", false, application.ErrOrderNotRefundable
+	}
+	var refundedAmount int64
+	if err := tx.QueryRow(ctx, "SELECT COALESCE(sum(amount_minor),0) FROM refunds WHERE payment_id=$1 AND status='SUCCEEDED'", refund.PaymentID).Scan(&refundedAmount); err != nil {
+		return application.Refund{}, "", false, fmt.Errorf("sum completed refunds: %w", err)
+	}
+	remaining := capturedAmount - refundedAmount
+	if input.AmountMinor == 0 {
+		refund.AmountMinor = remaining
+	} else {
+		refund.AmountMinor = input.AmountMinor
+	}
+	if refund.AmountMinor <= 0 || refund.AmountMinor > remaining {
 		return application.Refund{}, "", false, application.ErrOrderNotRefundable
 	}
 	refund.OrderID, refund.Status, refund.Reason = orderID, "PENDING", input.Reason
@@ -110,15 +124,21 @@ func (s *RefundStore) FinalizeRefund(ctx context.Context, refund application.Ref
 	if _, err := tx.Exec(ctx, "UPDATE refunds SET status='SUCCEEDED',provider_reference=$2,updated_at=now() WHERE id=$1", refund.ID, providerReference); err != nil {
 		return application.Refund{}, fmt.Errorf("complete refund record: %w", err)
 	}
-	if tag, err := tx.Exec(ctx, "UPDATE payments SET status='REFUNDED',updated_at=now() WHERE id=$1 AND status='PAID'", refund.PaymentID); err != nil {
-		return application.Refund{}, fmt.Errorf("mark payment refunded: %w", err)
-	} else if tag.RowsAffected() != 1 {
-		return application.Refund{}, application.ErrOrderNotRefundable
+	var capturedAmount, refundedAmount int64
+	if err := tx.QueryRow(ctx, `SELECT p.amount_minor,COALESCE(sum(r.amount_minor) FILTER(WHERE r.status='SUCCEEDED'),0) FROM payments p LEFT JOIN refunds r ON r.payment_id=p.id WHERE p.id=$1 GROUP BY p.id`, refund.PaymentID).Scan(&capturedAmount, &refundedAmount); err != nil {
+		return application.Refund{}, fmt.Errorf("check remaining refundable amount: %w", err)
 	}
-	if tag, err := tx.Exec(ctx, "UPDATE orders SET status='REFUNDED',updated_at=now() WHERE id=$1 AND status='PAID'", refund.OrderID); err != nil {
-		return application.Refund{}, fmt.Errorf("mark order refunded: %w", err)
-	} else if tag.RowsAffected() != 1 {
-		return application.Refund{}, application.ErrOrderNotRefundable
+	if refundedAmount >= capturedAmount {
+		if tag, err := tx.Exec(ctx, "UPDATE payments SET status='REFUNDED',updated_at=now() WHERE id=$1 AND status='PAID'", refund.PaymentID); err != nil {
+			return application.Refund{}, fmt.Errorf("mark payment refunded: %w", err)
+		} else if tag.RowsAffected() != 1 {
+			return application.Refund{}, application.ErrOrderNotRefundable
+		}
+		if tag, err := tx.Exec(ctx, "UPDATE orders SET status='REFUNDED',updated_at=now() WHERE id=$1 AND status='PAID'", refund.OrderID); err != nil {
+			return application.Refund{}, fmt.Errorf("mark order refunded: %w", err)
+		} else if tag.RowsAffected() != 1 {
+			return application.Refund{}, application.ErrOrderNotRefundable
+		}
 	}
 	if _, err := tx.Exec(ctx, `INSERT INTO audit_logs(actor_user_id,action,entity_type,entity_id,details) VALUES($1,'payment.refunded','order',$2,jsonb_build_object('refund_id',$3::bigint,'amount_minor',$4::bigint,'currency',$5::text))`, actorID, fmt.Sprint(refund.OrderID), refund.ID, refund.AmountMinor, refund.Currency); err != nil {
 		return application.Refund{}, fmt.Errorf("audit refund: %w", err)

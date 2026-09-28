@@ -156,8 +156,8 @@ paths:
   /v1/orders/{orderID}/refunds:
     post:
       operationId: refundOrder
-      summary: Refund the full amount of a paid order
-      description: Reserves one refund per order, calls the provider with a stable idempotency key, and updates payment and order state transactionally. Physical stock is not changed automatically; use an inventory return adjustment after goods are received.
+      summary: Refund part or all of a paid order
+      description: Reserves one refund per order at a time, calls the provider with a stable idempotency key, and updates payment and order state transactionally. Omit amount_minor or use zero to refund the remaining balance. Partial refunds leave the order and payment PAID until fully refunded. Physical stock is not changed automatically; use an inventory return adjustment after goods are received.
       security: [{ bearerAuth: [] }]
       parameters:
         - { name: orderID, in: path, required: true, schema: { type: integer, format: int64, minimum: 1 } }
@@ -170,6 +170,7 @@ paths:
               type: object
               additionalProperties: false
               properties:
+                amount_minor: { type: integer, format: int64, minimum: 0, description: Optional partial amount; zero or omitted refunds the remaining balance }
                 reason: { type: string, maxLength: 250 }
       responses:
         '201': { description: Refund completed or replayed }

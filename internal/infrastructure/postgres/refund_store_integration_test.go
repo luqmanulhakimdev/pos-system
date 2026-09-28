@@ -45,15 +45,28 @@ func TestRefundStoreIntegrationIdempotentPaidOrderRefund(t *testing.T) {
 		_, _ = pool.Exec(context.Background(), "DELETE FROM users WHERE id=$1", actorID)
 	})
 	service := application.NewRefunds(NewRefundStore(pool), payment.NewMockProvider())
-	refund, replayed, err := service.Execute(ctx, orderID, actorID, "refund-1", application.RefundInput{Reason: "customer request"})
-	if err != nil || replayed || refund.Status != "SUCCEEDED" || refund.PaymentID != paymentID {
+	refund, replayed, err := service.Execute(ctx, orderID, actorID, "refund-1", application.RefundInput{AmountMinor: 700, Reason: "partial customer request"})
+	if err != nil || replayed || refund.Status != "SUCCEEDED" || refund.PaymentID != paymentID || refund.AmountMinor != 700 {
 		t.Fatalf("refund=%#v replay=%v err=%v", refund, replayed, err)
 	}
-	second, replayed, err := service.Execute(ctx, orderID, actorID, "refund-1", application.RefundInput{Reason: "customer request"})
+	var orderStatus, paymentStatus string
+	if err := pool.QueryRow(ctx, "SELECT status FROM orders WHERE id=$1", orderID).Scan(&orderStatus); err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.QueryRow(ctx, "SELECT status FROM payments WHERE id=$1", paymentID).Scan(&paymentStatus); err != nil {
+		t.Fatal(err)
+	}
+	if orderStatus != "PAID" || paymentStatus != "PAID" {
+		t.Fatalf("partial refund changed state: order=%s payment=%s", orderStatus, paymentStatus)
+	}
+	second, replayed, err := service.Execute(ctx, orderID, actorID, "refund-1", application.RefundInput{AmountMinor: 700, Reason: "partial customer request"})
 	if err != nil || !replayed || second.ID != refund.ID {
 		t.Fatalf("replay=%#v replay=%v err=%v", second, replayed, err)
 	}
-	var orderStatus, paymentStatus string
+	last, replayed, err := service.Execute(ctx, orderID, actorID, "refund-2", application.RefundInput{Reason: "remaining balance"})
+	if err != nil || replayed || last.AmountMinor != 1299 || last.Status != "SUCCEEDED" {
+		t.Fatalf("remaining refund=%#v replay=%v err=%v", last, replayed, err)
+	}
 	var refundCount int
 	if err := pool.QueryRow(ctx, "SELECT status FROM orders WHERE id=$1", orderID).Scan(&orderStatus); err != nil {
 		t.Fatal(err)
@@ -64,7 +77,7 @@ func TestRefundStoreIntegrationIdempotentPaidOrderRefund(t *testing.T) {
 	if err := pool.QueryRow(ctx, "SELECT count(*) FROM refunds WHERE order_id=$1", orderID).Scan(&refundCount); err != nil {
 		t.Fatal(err)
 	}
-	if orderStatus != "REFUNDED" || paymentStatus != "REFUNDED" || refundCount != 1 {
+	if orderStatus != "REFUNDED" || paymentStatus != "REFUNDED" || refundCount != 2 {
 		t.Fatalf("order=%s payment=%s refunds=%d", orderStatus, paymentStatus, refundCount)
 	}
 }

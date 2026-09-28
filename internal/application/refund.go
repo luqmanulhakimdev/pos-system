@@ -29,7 +29,8 @@ type Refund struct {
 }
 
 type RefundInput struct {
-	Reason string `json:"reason"`
+	AmountMinor int64  `json:"amount_minor,omitempty"`
+	Reason      string `json:"reason"`
 }
 
 type RefundStore interface {
@@ -48,10 +49,10 @@ func NewRefunds(store RefundStore, provider RefundProvider) *Refunds {
 
 func (s *Refunds) Execute(ctx context.Context, orderID, actorID int64, key string, input RefundInput) (Refund, bool, error) {
 	input.Reason = strings.TrimSpace(input.Reason)
-	if s == nil || s.store == nil || s.provider == nil || orderID <= 0 || actorID <= 0 || key == "" || len(key) > 255 || strings.TrimSpace(key) != key || len(input.Reason) > 250 {
+	if s == nil || s.store == nil || s.provider == nil || orderID <= 0 || actorID <= 0 || key == "" || len(key) > 255 || strings.TrimSpace(key) != key || input.AmountMinor < 0 || len(input.Reason) > 250 {
 		return Refund{}, false, ErrInvalidRefund
 	}
-	hash := sha256.Sum256([]byte(input.Reason))
+	hash := sha256.Sum256([]byte(fmt.Sprintf("%d\x00%s", input.AmountMinor, input.Reason)))
 	refund, paymentReference, replayed, err := s.store.PrepareRefund(ctx, orderID, actorID, key, hash, input)
 	if err != nil {
 		return Refund{}, false, err

@@ -15,7 +15,7 @@ Pragmatic hexagonal architecture separates domain rules, application use cases, 
 - Hashed bearer sessions, one-time administrator bootstrap, and database-backed permission middleware
 - Admin-only staff management with bcrypt password hashes, role assignment, session revocation, and last-admin protection
 - Order payment orchestration through a deterministic mock provider with retry-safe idempotency keys
-- Full paid-order refunds with persistent reservations, stable provider idempotency, and audit records
+- Partial and full refunds with persistent reservations, remaining-balance checks, stable provider idempotency, and audit records
 - Permission-protected sales summary reports grouped by currency and date range
 - Permission-protected order history and detail endpoints with historical item snapshots
 - Product updates and soft deactivation protected by separate RBAC permissions
@@ -89,4 +89,4 @@ Copy `.env.example` to `.env`, start PostgreSQL, and set `ADMIN_EMAIL` and `ADMI
 
 ## Future improvements
 
-Add partial refunds, product and customer updates/deactivation, richer audit events, exports, and operational metrics and tracing.
+Add customer updates/deactivation, richer audit events, exports, and operational metrics and tracing.
