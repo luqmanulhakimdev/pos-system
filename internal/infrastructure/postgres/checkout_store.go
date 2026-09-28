@@ -92,7 +92,7 @@ func (tx *checkoutTransaction) SetInventoryQuantity(ctx context.Context, product
 	return nil
 }
 
-func (tx *checkoutTransaction) AppendStockMovement(ctx context.Context, productID, orderID, actorID int64, movementType domain.MovementType, delta int64, reason string) error {
+func (tx *checkoutTransaction) AppendStockMovement(ctx context.Context, productID int64, orderID *int64, actorID int64, movementType domain.MovementType, delta int64, reason string) error {
 	_, err := tx.tx.Exec(ctx, `INSERT INTO stock_movements
 		(product_id, order_id, actor_user_id, movement_type, quantity_delta, reason)
 		VALUES ($1, $2, $3, $4, $5, $6)`, productID, orderID, actorID, movementType, delta, reason)

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strings"
 )
 
 var (
@@ -39,7 +40,7 @@ func ApplyMovement(current Inventory, movement StockMovement) (Inventory, error)
 	if current.ProductID <= 0 || movement.ProductID != current.ProductID || current.Quantity < 0 || movement.Delta == 0 {
 		return Inventory{}, ErrInvalidMovement
 	}
-	if movement.Reason == "" {
+	if strings.TrimSpace(movement.Reason) == "" {
 		return Inventory{}, fmt.Errorf("%w: reason is required", ErrInvalidMovement)
 	}
 

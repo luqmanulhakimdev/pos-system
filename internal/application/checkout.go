@@ -52,7 +52,7 @@ type CheckoutTransaction interface {
 	CreateOrder(context.Context, OrderRecord) (int64, error)
 	CreateOrderItem(context.Context, int64, domain.OrderItem) error
 	SetInventoryQuantity(context.Context, int64, int64) error
-	AppendStockMovement(context.Context, int64, int64, int64, domain.MovementType, int64, string) error
+	AppendStockMovement(context.Context, int64, *int64, int64, domain.MovementType, int64, string) error
 	AppendAuditLog(context.Context, int64, string, string, string, map[string]any) error
 }
 
@@ -147,7 +147,7 @@ func (c *Checkout) Execute(ctx context.Context, request CheckoutRequest) (domain
 			if err := tx.SetInventoryQuantity(ctx, item.ProductID, updated.Quantity); err != nil {
 				return err
 			}
-			if err := tx.AppendStockMovement(ctx, item.ProductID, orderID, request.CashierID, domain.MovementSale, -item.Quantity, "checkout"); err != nil {
+			if err := tx.AppendStockMovement(ctx, item.ProductID, &orderID, request.CashierID, domain.MovementSale, -item.Quantity, "checkout"); err != nil {
 				return err
 			}
 		}

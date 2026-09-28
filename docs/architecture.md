@@ -20,7 +20,7 @@ Authentication and RBAC; products and categories; inventory and stock movements;
 
 ## Runtime
 
-The initial HTTP process exposes `GET /healthz`. Business endpoints are added in feature branches as their use cases and persistence rules are implemented.
+The HTTP process exposes `GET /healthz` and PostgreSQL-backed `GET /readyz`. Transactional checkout and inventory change use cases are implemented; business endpoints and authentication middleware follow in feature branches.
 
 ## Order lifecycle
 

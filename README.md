@@ -11,10 +11,10 @@ Pragmatic hexagonal architecture separates domain rules, application use cases, 
 - Go HTTP service with process health and database readiness endpoints
 - PostgreSQL schema migrations applied at startup under an advisory lock
 - Seeded roles and granular permissions
-- Domain rules for stock movements, order price snapshots, order totals, and lifecycle transitions
+- Transactional checkout and stock adjustment use cases, with stock movements, price snapshots, server-calculated totals, and audit records
 - Docker Compose local environment and GitHub Actions CI with a PostgreSQL integration-test service
 
-The HTTP business endpoints are still in progress; the checkout use case and PostgreSQL transaction adapter are implemented and integration-tested in CI.
+The HTTP business endpoints are still in progress; checkout and inventory change use cases use PostgreSQL transactions; concurrent oversell protection is covered by a CI integration test.
 
 ## Tech stack
 
