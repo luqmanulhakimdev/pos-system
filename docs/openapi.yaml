@@ -167,6 +167,42 @@ paths:
         '401': { description: Missing or invalid bearer token }
         '403': { description: User lacks product.create permission }
         '409': { description: SKU already exists }
+  /v1/inventory/{productID}:
+    get:
+      operationId: getInventory
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: productID, in: path, required: true, schema: { type: integer, format: int64, minimum: 1 } }
+      responses:
+        '200': { description: Current stock quantity }
+        '401': { description: Missing or invalid bearer token }
+        '403': { description: User lacks inventory.read permission }
+        '404': { description: Product inventory not found }
+  /v1/inventory/{productID}/adjustments:
+    post:
+      operationId: adjustInventory
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: productID, in: path, required: true, schema: { type: integer, format: int64, minimum: 1 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [type, quantity_delta, reason]
+              properties:
+                type: { type: string, enum: [RECEIPT, ADJUSTMENT, RETURN] }
+                quantity_delta: { type: integer, format: int64, not: { const: 0 } }
+                reason: { type: string, minLength: 1 }
+      responses:
+        '200': { description: Inventory balance after adjustment }
+        '400': { description: Invalid adjustment }
+        '401': { description: Missing or invalid bearer token }
+        '403': { description: User lacks inventory.adjust permission }
+        '404': { description: Product unavailable }
+        '409': { description: Insufficient stock }
   /readyz:
     get:
       operationId: readinessCheck

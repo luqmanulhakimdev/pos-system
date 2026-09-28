@@ -20,11 +20,23 @@ type InventoryChangeRequest struct {
 }
 
 type InventoryService struct {
-	store CheckoutStore
+	store  CheckoutStore
+	reader InventoryReader
 }
 
-func NewInventoryService(store CheckoutStore) *InventoryService {
-	return &InventoryService{store: store}
+type InventoryReader interface {
+	GetInventory(context.Context, int64) (domain.Inventory, error)
+}
+
+func NewInventoryService(store CheckoutStore, reader InventoryReader) *InventoryService {
+	return &InventoryService{store: store, reader: reader}
+}
+
+func (s *InventoryService) Get(ctx context.Context, productID int64) (domain.Inventory, error) {
+	if s.reader == nil || productID <= 0 {
+		return domain.Inventory{}, ErrInvalidInventoryChange
+	}
+	return s.reader.GetInventory(ctx, productID)
 }
 
 func (s *InventoryService) Change(ctx context.Context, request InventoryChangeRequest) (domain.Inventory, error) {

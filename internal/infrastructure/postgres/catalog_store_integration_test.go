@@ -34,6 +34,7 @@ func TestCatalogStoreIntegration(t *testing.T) {
 	var productID int64
 	t.Cleanup(func() {
 		if productID > 0 {
+			_, _ = pool.Exec(context.Background(), "DELETE FROM inventory WHERE product_id=$1", productID)
 			_, _ = pool.Exec(context.Background(), "DELETE FROM products WHERE id=$1", productID)
 		}
 		_, _ = pool.Exec(context.Background(), "DELETE FROM categories WHERE id=$1", category.ID)
@@ -43,6 +44,13 @@ func TestCatalogStoreIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 	productID = product.ID
+	var initialQuantity int64
+	if err := pool.QueryRow(ctx, "SELECT quantity FROM inventory WHERE product_id=$1", productID).Scan(&initialQuantity); err != nil {
+		t.Fatal(err)
+	}
+	if initialQuantity != 0 {
+		t.Fatalf("new product inventory=%d, want 0", initialQuantity)
+	}
 	products, err := store.ListProducts(ctx, application.ProductFilter{Search: "CAT-" + suffix, Limit: 10})
 	if err != nil {
 		t.Fatal(err)

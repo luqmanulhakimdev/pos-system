@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/luqmanulhakimdev/pos-system/internal/application"
+	"github.com/luqmanulhakimdev/pos-system/internal/domain"
 )
 
 type CatalogStore struct{ pool *pgxpool.Pool }
@@ -48,8 +50,13 @@ func (s *CatalogStore) ListCategories(ctx context.Context) ([]application.Catego
 }
 
 func (s *CatalogStore) CreateProduct(ctx context.Context, product application.Product) (application.Product, error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return application.Product{}, fmt.Errorf("begin product creation: %w", err)
+	}
+	defer tx.Rollback(ctx)
 	var categoryID pgtype.Int8
-	err := s.pool.QueryRow(ctx, `INSERT INTO products(category_id,sku,name,description,price_minor,currency) VALUES($1,$2,$3,$4,$5,$6)
+	err = tx.QueryRow(ctx, `INSERT INTO products(category_id,sku,name,description,price_minor,currency) VALUES($1,$2,$3,$4,$5,$6)
 		RETURNING id,category_id,sku,name,description,price_minor,currency,active`, product.CategoryID, product.SKU, product.Name, product.Description, product.PriceMinor, product.Currency).Scan(&product.ID, &categoryID, &product.SKU, &product.Name, &product.Description, &product.PriceMinor, &product.Currency, &product.Active)
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -65,6 +72,12 @@ func (s *CatalogStore) CreateProduct(ctx context.Context, product application.Pr
 	}
 	if categoryID.Valid {
 		product.CategoryID = &categoryID.Int64
+	}
+	if _, err := tx.Exec(ctx, "INSERT INTO inventory(product_id,quantity) VALUES($1,0)", product.ID); err != nil {
+		return application.Product{}, fmt.Errorf("create product inventory: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return application.Product{}, fmt.Errorf("commit product creation: %w", err)
 	}
 	return product, nil
 }
@@ -96,3 +109,17 @@ func (s *CatalogStore) ListProducts(ctx context.Context, filter application.Prod
 }
 
 var _ application.CatalogStore = (*CatalogStore)(nil)
+
+func (s *CatalogStore) GetInventory(ctx context.Context, productID int64) (domain.Inventory, error) {
+	var inventory domain.Inventory
+	err := s.pool.QueryRow(ctx, "SELECT product_id,quantity FROM inventory WHERE product_id=$1", productID).Scan(&inventory.ProductID, &inventory.Quantity)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.Inventory{}, application.ErrProductUnavailable
+	}
+	if err != nil {
+		return domain.Inventory{}, fmt.Errorf("load inventory: %w", err)
+	}
+	return inventory, nil
+}
+
+var _ application.InventoryReader = (*CatalogStore)(nil)

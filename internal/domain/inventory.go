@@ -23,8 +23,8 @@ const (
 )
 
 type Inventory struct {
-	ProductID int64
-	Quantity  int64
+	ProductID int64 `json:"product_id"`
+	Quantity  int64 `json:"quantity"`
 }
 
 type StockMovement struct {

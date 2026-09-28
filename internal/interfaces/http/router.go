@@ -15,7 +15,7 @@ import (
 )
 
 // NewRouter builds the HTTP surface exposed by the service.
-func NewRouter(checkDatabase func(context.Context) error, auth *application.AuthService, payments *application.Payments, checkout *application.Checkout, catalog *application.Catalog) http.Handler {
+func NewRouter(checkDatabase func(context.Context) error, auth *application.AuthService, payments *application.Payments, checkout *application.Checkout, catalog *application.Catalog, inventory *application.InventoryService) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -222,6 +222,59 @@ func NewRouter(checkDatabase func(context.Context) error, auth *application.Auth
 					return
 				}
 				writeJSON(w, http.StatusCreated, item)
+			})))
+		}
+		if inventory != nil {
+			mux.Handle("GET /v1/inventory/{productID}", RequirePermission(auth, "inventory.read", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				productID, err := strconv.ParseInt(r.PathValue("productID"), 10, 64)
+				if err != nil || productID <= 0 {
+					writeError(w, http.StatusBadRequest, "invalid product id")
+					return
+				}
+				stock, err := inventory.Get(r.Context(), productID)
+				if errors.Is(err, application.ErrProductUnavailable) {
+					writeError(w, http.StatusNotFound, "inventory not found")
+					return
+				}
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, "could not load inventory")
+					return
+				}
+				writeJSON(w, http.StatusOK, stock)
+			})))
+			mux.Handle("POST /v1/inventory/{productID}/adjustments", RequirePermission(auth, "inventory.adjust", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				productID, err := strconv.ParseInt(r.PathValue("productID"), 10, 64)
+				if err != nil || productID <= 0 {
+					writeError(w, http.StatusBadRequest, "invalid product id")
+					return
+				}
+				var input struct {
+					Type   domain.MovementType `json:"type"`
+					Delta  int64               `json:"quantity_delta"`
+					Reason string              `json:"reason"`
+				}
+				if err := decodeJSON(w, r, &input); err != nil {
+					writeError(w, http.StatusBadRequest, "invalid request")
+					return
+				}
+				stock, err := inventory.Change(r.Context(), application.InventoryChangeRequest{ProductID: productID, ActorID: UserFromContext(r.Context()).ID, Type: input.Type, Delta: input.Delta, Reason: input.Reason})
+				if errors.Is(err, application.ErrInvalidInventoryChange) || errors.Is(err, domain.ErrInvalidMovement) {
+					writeError(w, http.StatusBadRequest, "invalid inventory adjustment")
+					return
+				}
+				if errors.Is(err, application.ErrProductUnavailable) {
+					writeError(w, http.StatusNotFound, "product unavailable")
+					return
+				}
+				if errors.Is(err, domain.ErrInsufficientStock) {
+					writeError(w, http.StatusConflict, "insufficient stock")
+					return
+				}
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, "inventory adjustment failed")
+					return
+				}
+				writeJSON(w, http.StatusOK, stock)
 			})))
 		}
 	}
