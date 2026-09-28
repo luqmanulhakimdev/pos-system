@@ -21,3 +21,15 @@ Authentication and RBAC; products and categories; inventory and stock movements;
 ## Runtime
 
 The initial HTTP process exposes `GET /healthz`. Business endpoints are added in feature branches as their use cases and persistence rules are implemented.
+
+## Order lifecycle
+
+```mermaid
+stateDiagram-v2
+  [*] --> PENDING
+  PENDING --> CONFIRMED
+  PENDING --> CANCELLED
+  CONFIRMED --> PAID
+  CONFIRMED --> CANCELLED
+  PAID --> REFUNDED
+```
