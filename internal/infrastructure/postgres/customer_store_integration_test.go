@@ -52,4 +52,15 @@ func TestCustomerStoreIntegrationCreateListAndAudit(t *testing.T) {
 	if auditCount != 1 {
 		t.Fatalf("customer creation audit count=%d", auditCount)
 	}
+	updated, err := service.Update(ctx, actorID, customer.ID, application.Customer{Name: "Updated Customer", Email: customer.Email, Phone: customer.Phone})
+	if err != nil || updated.Name != "Updated Customer" || !updated.Active {
+		t.Fatalf("updated customer=%#v err=%v", updated, err)
+	}
+	if err := service.Deactivate(ctx, actorID, customer.ID); err != nil {
+		t.Fatal(err)
+	}
+	items, err = service.List(ctx, application.CustomerFilter{Search: suffix, Limit: 10})
+	if err != nil || len(items) != 0 {
+		t.Fatalf("deactivated customer still listed: %#v err=%v", items, err)
+	}
 }

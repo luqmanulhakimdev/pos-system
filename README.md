@@ -19,6 +19,7 @@ Pragmatic hexagonal architecture separates domain rules, application use cases, 
 - Permission-protected sales summary reports grouped by currency and date range
 - Permission-protected order history and detail endpoints with historical item snapshots
 - Product updates and soft deactivation protected by separate RBAC permissions
+- Customer updates and soft deactivation protected by separate RBAC permissions
 - Docker Compose local environment and GitHub Actions CI with a PostgreSQL integration-test service
 
 Checkout, cancellation, refunds, and inventory use cases use PostgreSQL transactions; concurrent oversell protection is covered by a CI integration test. Authentication, catalog, customer, inventory adjustment, checkout, mock payment, unpaid order cancellation, and paid order refund endpoints are available.
@@ -89,4 +90,4 @@ Copy `.env.example` to `.env`, start PostgreSQL, and set `ADMIN_EMAIL` and `ADMI
 
 ## Future improvements
 
-Add customer updates/deactivation, richer audit events, exports, and operational metrics and tracing.
+Add richer audit events, exports, and operational metrics and tracing.

@@ -74,6 +74,13 @@ func (s *customerHTTPStore) CreateCustomer(_ context.Context, actorID int64, cus
 func (s *customerHTTPStore) ListCustomers(context.Context, application.CustomerFilter) ([]application.Customer, error) {
 	return []application.Customer{s.customer}, nil
 }
+func (s *customerHTTPStore) UpdateCustomer(_ context.Context, actorID, customerID int64, customer application.Customer) (application.Customer, error) {
+	s.createdBy = actorID
+	customer.ID = customerID
+	s.customer = customer
+	return customer, nil
+}
+func (*customerHTTPStore) DeactivateCustomer(context.Context, int64, int64) error { return nil }
 func (s *testAuthStore) RevokeSession(_ context.Context, hash string) error {
 	if hash != s.hash || s.revoked {
 		return application.ErrInvalidSession
@@ -201,6 +208,23 @@ func TestCustomerCreationRequiresPermissionAndPassesActor(t *testing.T) {
 	router.ServeHTTP(recorder, request)
 	if recorder.Code != http.StatusForbidden {
 		t.Fatalf("unauthorized permission status=%d", recorder.Code)
+	}
+	store.permissions = []string{"customer.update"}
+	request = httptest.NewRequest(http.MethodPatch, "/v1/customers/9", strings.NewReader(`{"name":"Updated Ana","phone":"0812"}`))
+	request.Header.Set("Authorization", "Bearer "+token)
+	request.Header.Set("Content-Type", "application/json")
+	recorder = httptest.NewRecorder()
+	router.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK || customerStore.createdBy != 1 || customerStore.customer.Name != "Updated Ana" {
+		t.Fatalf("customer update status=%d actor=%d customer=%#v body=%s", recorder.Code, customerStore.createdBy, customerStore.customer, recorder.Body.String())
+	}
+	store.permissions = []string{"customer.delete"}
+	request = httptest.NewRequest(http.MethodDelete, "/v1/customers/9", nil)
+	request.Header.Set("Authorization", "Bearer "+token)
+	recorder = httptest.NewRecorder()
+	router.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusNoContent {
+		t.Fatalf("customer deactivation status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
 }
 

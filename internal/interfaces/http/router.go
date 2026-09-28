@@ -624,6 +624,57 @@ func NewRouter(checkDatabase func(context.Context) error, auth *application.Auth
 				}
 				writeJSON(w, http.StatusCreated, customer)
 			})))
+			mux.Handle("PATCH /v1/customers/{customerID}", RequirePermission(auth, "customer.update", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				customerID, err := strconv.ParseInt(r.PathValue("customerID"), 10, 64)
+				if err != nil || customerID <= 0 {
+					writeError(w, http.StatusBadRequest, "invalid customer id")
+					return
+				}
+				var input struct {
+					Name  string `json:"name"`
+					Email string `json:"email"`
+					Phone string `json:"phone"`
+				}
+				if err := decodeJSON(w, r, &input); err != nil {
+					writeError(w, http.StatusBadRequest, "invalid request")
+					return
+				}
+				customer, err := customers.Update(r.Context(), UserFromContext(r.Context()).ID, customerID, application.Customer{Name: input.Name, Email: input.Email, Phone: input.Phone})
+				if errors.Is(err, application.ErrInvalidCustomer) {
+					writeError(w, http.StatusBadRequest, "invalid customer")
+					return
+				}
+				if errors.Is(err, application.ErrCustomerNotFound) {
+					writeError(w, http.StatusNotFound, "customer not found")
+					return
+				}
+				if errors.Is(err, application.ErrDuplicateCustomerEmail) {
+					writeError(w, http.StatusConflict, "customer email already exists")
+					return
+				}
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, "could not update customer")
+					return
+				}
+				writeJSON(w, http.StatusOK, customer)
+			})))
+			mux.Handle("DELETE /v1/customers/{customerID}", RequirePermission(auth, "customer.delete", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				customerID, err := strconv.ParseInt(r.PathValue("customerID"), 10, 64)
+				if err != nil || customerID <= 0 {
+					writeError(w, http.StatusBadRequest, "invalid customer id")
+					return
+				}
+				err = customers.Deactivate(r.Context(), UserFromContext(r.Context()).ID, customerID)
+				if errors.Is(err, application.ErrCustomerNotFound) {
+					writeError(w, http.StatusNotFound, "customer not found")
+					return
+				}
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, "could not deactivate customer")
+					return
+				}
+				w.WriteHeader(http.StatusNoContent)
+			})))
 		}
 	}
 	return mux

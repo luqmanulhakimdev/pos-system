@@ -397,6 +397,47 @@ paths:
         '401': { description: Missing or invalid bearer token }
         '403': { description: User lacks customer.create permission }
         '409': { description: Email is already registered }
+  /v1/customers/{customerID}:
+    patch:
+      operationId: updateCustomer
+      summary: Update an active customer
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: customerID, in: path, required: true, schema: { type: integer, format: int64, minimum: 1 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name]
+              anyOf:
+                - required: [email]
+                - required: [phone]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 120 }
+                email: { type: string, format: email, maxLength: 254 }
+                phone: { type: string, maxLength: 32 }
+      responses:
+        '200': { description: Updated customer }
+        '400': { description: Invalid customer details or identifier }
+        '401': { description: Missing or invalid bearer token }
+        '403': { description: User lacks customer.update permission }
+        '404': { description: Active customer not found }
+        '409': { description: Email is already registered }
+    delete:
+      operationId: deactivateCustomer
+      summary: Soft-deactivate a customer
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: customerID, in: path, required: true, schema: { type: integer, format: int64, minimum: 1 } }
+      responses:
+        '204': { description: Customer deactivated }
+        '400': { description: Invalid customer identifier }
+        '401': { description: Missing or invalid bearer token }
+        '403': { description: User lacks customer.delete permission }
+        '404': { description: Active customer not found }
   /v1/reports/sales:
     get:
       operationId: getSalesReport

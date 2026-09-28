@@ -18,6 +18,7 @@ Base URL: `http://localhost:8080`.
 - `POST /v1/categories` and `POST /v1/products` require `product.create`. Product prices use integer minor units and default to IDR if currency is omitted.
 - `PUT /v1/products/{productID}` requires `product.update`; `DELETE /v1/products/{productID}` requires `product.delete` and deactivates the product while retaining historical order snapshots.
 - `GET /v1/customers` requires `customer.read` and supports bounded search and pagination. `POST /v1/customers` requires `customer.create`, a name, and at least one of email or phone. Email addresses are normalized and unique; creation and its audit record commit together.
+- `PATCH /v1/customers/{customerID}` requires `customer.update`; `DELETE /v1/customers/{customerID}` requires `customer.delete` and soft-deactivates the customer. Inactive customers are omitted from search and historical orders remain intact.
 - Creating a product also creates a zero-quantity inventory record. `GET /v1/inventory/{productID}` requires `inventory.read`; `POST /v1/inventory/{productID}/adjustments` requires `inventory.adjust` and records a stock movement and audit event in the same transaction.
 
 Authenticated routes load current role permissions from PostgreSQL on each request. The `RequirePermission` middleware is available for business handlers; permission names are seeded in the initial migration (for example `order.read` and `inventory.adjust`).

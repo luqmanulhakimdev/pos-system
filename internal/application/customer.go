@@ -11,6 +11,7 @@ import (
 var (
 	ErrInvalidCustomer        = errors.New("invalid customer")
 	ErrDuplicateCustomerEmail = errors.New("customer email already exists")
+	ErrCustomerNotFound       = errors.New("customer not found")
 )
 
 type Customer struct {
@@ -20,6 +21,7 @@ type Customer struct {
 	Phone     string    `json:"phone,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+	Active    bool      `json:"active"`
 }
 
 type CustomerFilter struct {
@@ -30,6 +32,31 @@ type CustomerFilter struct {
 type CustomerStore interface {
 	CreateCustomer(context.Context, int64, Customer) (Customer, error)
 	ListCustomers(context.Context, CustomerFilter) ([]Customer, error)
+	UpdateCustomer(context.Context, int64, int64, Customer) (Customer, error)
+	DeactivateCustomer(context.Context, int64, int64) error
+}
+
+func (s *Customers) Update(ctx context.Context, actorID, customerID int64, customer Customer) (Customer, error) {
+	customer.Name = strings.TrimSpace(customer.Name)
+	customer.Email = strings.ToLower(strings.TrimSpace(customer.Email))
+	customer.Phone = strings.TrimSpace(customer.Phone)
+	if s == nil || s.store == nil || actorID <= 0 || customerID <= 0 || customer.Name == "" || len(customer.Name) > 120 || len(customer.Email) > 254 || len(customer.Phone) > 32 || customer.Email == "" && customer.Phone == "" {
+		return Customer{}, ErrInvalidCustomer
+	}
+	if customer.Email != "" {
+		parsed, err := mail.ParseAddress(customer.Email)
+		if err != nil || parsed.Address != customer.Email {
+			return Customer{}, ErrInvalidCustomer
+		}
+	}
+	return s.store.UpdateCustomer(ctx, actorID, customerID, customer)
+}
+
+func (s *Customers) Deactivate(ctx context.Context, actorID, customerID int64) error {
+	if s == nil || s.store == nil || actorID <= 0 || customerID <= 0 {
+		return ErrInvalidCustomer
+	}
+	return s.store.DeactivateCustomer(ctx, actorID, customerID)
 }
 
 type Customers struct{ store CustomerStore }

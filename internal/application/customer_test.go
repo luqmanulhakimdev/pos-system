@@ -20,6 +20,12 @@ func (s *customerStoreStub) ListCustomers(_ context.Context, filter CustomerFilt
 	s.listed = filter
 	return []Customer{}, nil
 }
+func (s *customerStoreStub) UpdateCustomer(_ context.Context, _ int64, id int64, customer Customer) (Customer, error) {
+	customer.ID = id
+	s.created = customer
+	return customer, nil
+}
+func (*customerStoreStub) DeactivateCustomer(context.Context, int64, int64) error { return nil }
 
 func TestCustomersNormalizeAndValidateInput(t *testing.T) {
 	store := &customerStoreStub{}
