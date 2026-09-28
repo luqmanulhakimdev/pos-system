@@ -115,6 +115,32 @@ paths:
         '403': { description: User lacks order.cancel permission }
         '404': { description: Order not found }
         '409': { description: Order state prevents cancellation or payment is still in progress }
+  /v1/orders/{orderID}/refunds:
+    post:
+      operationId: refundOrder
+      summary: Refund the full amount of a paid order
+      description: Reserves one refund per order, calls the provider with a stable idempotency key, and updates payment and order state transactionally. Physical stock is not changed automatically; use an inventory return adjustment after goods are received.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: orderID, in: path, required: true, schema: { type: integer, format: int64, minimum: 1 } }
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 1, maxLength: 255 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                reason: { type: string, maxLength: 250 }
+      responses:
+        '201': { description: Refund completed or replayed }
+        '400': { description: Invalid refund request or missing idempotency key }
+        '401': { description: Missing or invalid bearer token }
+        '403': { description: User lacks payment.refund permission }
+        '404': { description: Order not found }
+        '409': { description: Order is not paid, another refund is in progress, or idempotency key conflicts }
+        '502': { description: Provider unavailable; retry with the same key }
   /v1/categories:
     get:
       operationId: listCategories

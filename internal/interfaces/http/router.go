@@ -15,7 +15,7 @@ import (
 )
 
 // NewRouter builds the HTTP surface exposed by the service.
-func NewRouter(checkDatabase func(context.Context) error, auth *application.AuthService, payments *application.Payments, checkout *application.Checkout, catalog *application.Catalog, inventory *application.InventoryService, customers *application.Customers, cancelOrder *application.CancelOrder) http.Handler {
+func NewRouter(checkDatabase func(context.Context) error, auth *application.AuthService, payments *application.Payments, checkout *application.Checkout, catalog *application.Catalog, inventory *application.InventoryService, customers *application.Customers, cancelOrder *application.CancelOrder, refunds *application.Refunds) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -149,6 +149,58 @@ func NewRouter(checkDatabase func(context.Context) error, auth *application.Auth
 					return
 				}
 				w.WriteHeader(http.StatusNoContent)
+			})))
+		}
+		if refunds != nil {
+			mux.Handle("POST /v1/orders/{orderID}/refunds", RequirePermission(auth, "payment.refund", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				orderID, err := strconv.ParseInt(r.PathValue("orderID"), 10, 64)
+				if err != nil || orderID <= 0 {
+					writeError(w, http.StatusBadRequest, "invalid order id")
+					return
+				}
+				key := r.Header.Get("Idempotency-Key")
+				if key == "" {
+					writeError(w, http.StatusBadRequest, "Idempotency-Key is required")
+					return
+				}
+				var input application.RefundInput
+				if err := decodeJSON(w, r, &input); err != nil {
+					writeError(w, http.StatusBadRequest, "invalid request")
+					return
+				}
+				refund, replayed, err := refunds.Execute(r.Context(), orderID, UserFromContext(r.Context()).ID, key, input)
+				if errors.Is(err, application.ErrInvalidRefund) {
+					writeError(w, http.StatusBadRequest, "invalid refund request")
+					return
+				}
+				if errors.Is(err, application.ErrOrderNotFound) {
+					writeError(w, http.StatusNotFound, "order not found")
+					return
+				}
+				if errors.Is(err, application.ErrOrderNotRefundable) {
+					writeError(w, http.StatusConflict, "only paid orders can be refunded")
+					return
+				}
+				if errors.Is(err, application.ErrRefundInProgress) {
+					writeError(w, http.StatusConflict, "another refund is already in progress")
+					return
+				}
+				if errors.Is(err, application.ErrRefundConflict) {
+					writeError(w, http.StatusConflict, "Idempotency-Key was used for a different refund request")
+					return
+				}
+				if errors.Is(err, application.ErrRefundProviderUnavailable) {
+					writeError(w, http.StatusBadGateway, "refund provider unavailable; retry with the same key")
+					return
+				}
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, "refund failed")
+					return
+				}
+				if replayed {
+					w.Header().Set("Idempotent-Replay", "true")
+				}
+				writeJSON(w, http.StatusCreated, refund)
 			})))
 		}
 		if catalog != nil {

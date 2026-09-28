@@ -49,6 +49,22 @@ type PaymentProvider interface {
 	Charge(context.Context, ChargeRequest) (ChargeResult, error)
 }
 
+type RefundRequest struct {
+	RefundID          int64
+	OrderID           int64
+	PaymentID         int64
+	ProviderReference string
+	AmountMinor       int64
+	Currency          string
+	IdempotencyKey    string
+}
+
+type RefundResult struct{ ProviderReference string }
+
+type RefundProvider interface {
+	Refund(context.Context, RefundRequest) (RefundResult, error)
+}
+
 type PaymentStore interface {
 	PreparePayment(context.Context, int64, string) (Payment, error)
 	FinalizePayment(context.Context, Payment, ChargeResult, int64) (Payment, error)
