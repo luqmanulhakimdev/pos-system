@@ -51,11 +51,11 @@ func NewOrderItem(productID int64, name, sku string, quantity, unitPriceMinor in
 }
 
 type Order struct {
-	ID            int64
-	Status        OrderStatus
-	Items         []OrderItem
-	SubtotalMinor int64
-	Currency      string
+	ID            int64       `json:"id"`
+	Status        OrderStatus `json:"status"`
+	Items         []OrderItem `json:"items"`
+	SubtotalMinor int64       `json:"subtotal_minor"`
+	Currency      string      `json:"currency"`
 }
 
 func NewOrder(items []OrderItem, status OrderStatus) (Order, error) {

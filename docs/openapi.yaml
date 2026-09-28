@@ -68,6 +68,39 @@ paths:
         '403': { description: User lacks payment.create permission }
         '409': { description: Order is not payable }
         '502': { description: Payment provider unavailable }
+  /v1/orders/checkout:
+    post:
+      operationId: checkout
+      summary: Create an order and atomically decrement stock
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [items]
+              properties:
+                customer_id: { type: integer, format: int64, minimum: 1 }
+                items:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [product_id, quantity]
+                    properties:
+                      product_id: { type: integer, format: int64, minimum: 1 }
+                      quantity: { type: integer, format: int64, minimum: 1 }
+      responses:
+        '201': { description: Pending order created with server-derived prices }
+        '400': { description: Invalid checkout request }
+        '401': { description: Missing or invalid bearer token }
+        '403': { description: User lacks order.create permission }
+        '404': { description: Product is unavailable }
+        '409': { description: Insufficient stock }
   /readyz:
     get:
       operationId: readinessCheck

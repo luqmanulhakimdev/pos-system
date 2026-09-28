@@ -11,10 +11,11 @@ import (
 	"time"
 
 	"github.com/luqmanulhakimdev/pos-system/internal/application"
+	"github.com/luqmanulhakimdev/pos-system/internal/domain"
 )
 
 // NewRouter builds the HTTP surface exposed by the service.
-func NewRouter(checkDatabase func(context.Context) error, auth *application.AuthService, payments *application.Payments) http.Handler {
+func NewRouter(checkDatabase func(context.Context) error, auth *application.AuthService, payments *application.Payments, checkout *application.Checkout) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -86,6 +87,37 @@ func NewRouter(checkDatabase func(context.Context) error, auth *application.Auth
 					return
 				}
 				writeJSON(w, http.StatusOK, payment)
+			})))
+		}
+		if checkout != nil {
+			mux.Handle("POST /v1/orders/checkout", RequirePermission(auth, "order.create", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var input struct {
+					CustomerID *int64                      `json:"customer_id"`
+					Items      []application.RequestedItem `json:"items"`
+				}
+				if err := decodeJSON(w, r, &input); err != nil {
+					writeError(w, http.StatusBadRequest, "invalid request")
+					return
+				}
+				user := UserFromContext(r.Context())
+				order, err := checkout.Execute(r.Context(), application.CheckoutRequest{CashierID: user.ID, CustomerID: input.CustomerID, Items: input.Items})
+				if errors.Is(err, application.ErrInvalidCheckout) {
+					writeError(w, http.StatusBadRequest, "invalid checkout")
+					return
+				}
+				if errors.Is(err, application.ErrProductUnavailable) {
+					writeError(w, http.StatusNotFound, "product unavailable")
+					return
+				}
+				if errors.Is(err, domain.ErrInsufficientStock) {
+					writeError(w, http.StatusConflict, "insufficient stock")
+					return
+				}
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, "checkout failed")
+					return
+				}
+				writeJSON(w, http.StatusCreated, order)
 			})))
 		}
 	}
