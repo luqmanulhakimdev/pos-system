@@ -1,4 +1,13 @@
 services:
+  bootstrap-admin:
+    build:
+      context: .
+    profiles: ["tools"]
+    env_file: .env
+    entrypoint: ["/bootstrap-admin"]
+    depends_on:
+      postgres:
+        condition: service_healthy
   app:
     build:
       context: .

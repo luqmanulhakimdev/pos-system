@@ -68,6 +68,10 @@ go build ./...
 
 Unit tests run without a database. To include the PostgreSQL migration integration test, start a clean local database and set `TEST_DATABASE_URL` before `go test ./...`. CI runs both unit and integration tests.
 
+### Create the first administrator
+
+Copy `.env.example` to `.env`, start PostgreSQL, and set `ADMIN_EMAIL` and `ADMIN_PASSWORD` in the local `.env` file. Use a password between 12 and 72 bytes. Then run `docker compose --profile tools run --rm bootstrap-admin`. The command applies pending migrations and creates one active administrator only when no active admin exists; it refuses subsequent bootstrap attempts. Keep `.env` out of version control. Login at `POST /v1/auth/login`, then use the returned bearer token with `GET /v1/me` and `POST /v1/auth/logout`.
+
 ## Design decisions
 
 - Stock changes use stock movements; checkout will apply inventory balance changes and movements in the same transaction while locking inventory rows.

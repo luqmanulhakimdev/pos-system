@@ -30,11 +30,11 @@ func TestMigrationsIntegration(t *testing.T) {
 	var tableCount int
 	if err := pool.QueryRow(ctx, `SELECT count(*) FROM information_schema.tables
 		WHERE table_schema = 'public' AND table_name IN
-		('users','roles','permissions','products','inventory','stock_movements','orders','order_items','payments','audit_logs')`).Scan(&tableCount); err != nil {
+		('users','roles','permissions','products','inventory','stock_movements','orders','order_items','payments','audit_logs','user_sessions')`).Scan(&tableCount); err != nil {
 		t.Fatal(err)
 	}
-	if tableCount != 10 {
-		t.Fatalf("core table count = %d, want 10", tableCount)
+	if tableCount != 11 {
+		t.Fatalf("core table count = %d, want 11", tableCount)
 	}
 
 	var seededRoles int

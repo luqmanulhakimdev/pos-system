@@ -2,10 +2,55 @@ openapi: 3.1.0
 info:
   title: POS System API
   version: 0.1.0
-  description: Initial service contract. Business endpoints will be added with their implementation.
+  description: POS health checks and session authentication contract.
 servers:
   - url: http://localhost:8080
 paths:
+  /v1/auth/login:
+    post:
+      operationId: login
+      summary: Create a bearer session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, minLength: 1, maxLength: 72 }
+      responses:
+        '201':
+          description: Session created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [access_token, token_type, expires_at]
+                properties:
+                  access_token: { type: string }
+                  token_type: { type: string, const: Bearer }
+                  expires_at: { type: string, format: date-time }
+        '400': { description: Invalid request }
+        '401': { description: Invalid credentials }
+  /v1/me:
+    get:
+      operationId: currentUser
+      summary: Return the authenticated user and permissions
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Current user }
+        '401': { description: Missing, invalid, or expired bearer token }
+  /v1/auth/logout:
+    post:
+      operationId: logout
+      summary: Revoke the current bearer session
+      security: [{ bearerAuth: [] }]
+      responses:
+        '204': { description: Session revoked }
+        '401': { description: Missing or invalid bearer token }
   /readyz:
     get:
       operationId: readinessCheck
@@ -32,3 +77,8 @@ paths:
               schema:
                 type: string
               example: ok
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer

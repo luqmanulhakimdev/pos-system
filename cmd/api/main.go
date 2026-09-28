@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/luqmanulhakimdev/pos-system/internal/application"
 	"github.com/luqmanulhakimdev/pos-system/internal/infrastructure/postgres"
 	httpapi "github.com/luqmanulhakimdev/pos-system/internal/interfaces/http"
 )
@@ -38,7 +39,7 @@ func run() error {
 	}
 	server := &http.Server{
 		Addr:              addr,
-		Handler:           httpapi.NewRouter(pool.Ping),
+		Handler:           httpapi.NewRouter(pool.Ping, application.NewAuthService(postgres.NewAuthStore(pool), 15*time.Minute)),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
