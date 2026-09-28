@@ -45,6 +45,7 @@ func run() error {
 			application.NewAuthService(postgres.NewAuthStore(pool), 15*time.Minute),
 			application.NewPayments(postgres.NewPaymentStore(pool), payment.NewMockProvider()),
 			application.NewCheckout(postgres.NewCheckoutStore(pool)),
+			application.NewCatalog(postgres.NewCatalogStore(pool)),
 		),
 		ReadHeaderTimeout: 5 * time.Second,
 	}

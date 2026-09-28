@@ -101,6 +101,72 @@ paths:
         '403': { description: User lacks order.create permission }
         '404': { description: Product is unavailable }
         '409': { description: Insufficient stock }
+  /v1/categories:
+    get:
+      operationId: listCategories
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Active categories }
+        '401': { description: Missing or invalid bearer token }
+        '403': { description: User lacks product.read permission }
+    post:
+      operationId: createCategory
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 120 }
+                description: { type: string, maxLength: 1000 }
+      responses:
+        '201': { description: Category created }
+        '400': { description: Invalid category }
+        '401': { description: Missing or invalid bearer token }
+        '403': { description: User lacks product.create permission }
+        '409': { description: Category name already exists }
+  /v1/products:
+    get:
+      operationId: listProducts
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: search, in: query, schema: { type: string, maxLength: 200 } }
+        - { name: category_id, in: query, schema: { type: integer, format: int64, minimum: 1 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+      responses:
+        '200': { description: Active products }
+        '400': { description: Invalid list filters }
+        '401': { description: Missing or invalid bearer token }
+        '403': { description: User lacks product.read permission }
+    post:
+      operationId: createProduct
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [sku, name, price_minor]
+              properties:
+                category_id: { type: integer, format: int64, minimum: 1 }
+                sku: { type: string, minLength: 1, maxLength: 64 }
+                name: { type: string, minLength: 1, maxLength: 200 }
+                description: { type: string, maxLength: 2000 }
+                price_minor: { type: integer, format: int64, minimum: 0 }
+                currency: { type: string, pattern: '^[A-Z]{3}$', default: IDR }
+      responses:
+        '201': { description: Product created }
+        '400': { description: Invalid product or category }
+        '401': { description: Missing or invalid bearer token }
+        '403': { description: User lacks product.create permission }
+        '409': { description: SKU already exists }
   /readyz:
     get:
       operationId: readinessCheck

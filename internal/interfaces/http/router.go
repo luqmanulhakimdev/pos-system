@@ -15,7 +15,7 @@ import (
 )
 
 // NewRouter builds the HTTP surface exposed by the service.
-func NewRouter(checkDatabase func(context.Context) error, auth *application.AuthService, payments *application.Payments, checkout *application.Checkout) http.Handler {
+func NewRouter(checkDatabase func(context.Context) error, auth *application.AuthService, payments *application.Payments, checkout *application.Checkout, catalog *application.Catalog) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -118,6 +118,110 @@ func NewRouter(checkDatabase func(context.Context) error, auth *application.Auth
 					return
 				}
 				writeJSON(w, http.StatusCreated, order)
+			})))
+		}
+		if catalog != nil {
+			mux.Handle("GET /v1/categories", RequirePermission(auth, "product.read", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				items, err := catalog.ListCategories(r.Context())
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, "could not load categories")
+					return
+				}
+				writeJSON(w, http.StatusOK, items)
+			})))
+			mux.Handle("POST /v1/categories", RequirePermission(auth, "product.create", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var input struct {
+					Name        string `json:"name"`
+					Description string `json:"description"`
+				}
+				if err := decodeJSON(w, r, &input); err != nil {
+					writeError(w, http.StatusBadRequest, "invalid request")
+					return
+				}
+				item, err := catalog.CreateCategory(r.Context(), application.Category{Name: input.Name, Description: input.Description})
+				if errors.Is(err, application.ErrInvalidCatalogItem) {
+					writeError(w, http.StatusBadRequest, "invalid category")
+					return
+				}
+				if errors.Is(err, application.ErrDuplicateCategory) {
+					writeError(w, http.StatusConflict, "category already exists")
+					return
+				}
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, "could not create category")
+					return
+				}
+				writeJSON(w, http.StatusCreated, item)
+			})))
+			mux.Handle("GET /v1/products", RequirePermission(auth, "product.read", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				limit, offset := 50, 0
+				if raw := r.URL.Query().Get("limit"); raw != "" {
+					n, err := strconv.Atoi(raw)
+					if err != nil {
+						writeError(w, http.StatusBadRequest, "invalid limit")
+						return
+					}
+					limit = n
+				}
+				if raw := r.URL.Query().Get("offset"); raw != "" {
+					n, err := strconv.Atoi(raw)
+					if err != nil {
+						writeError(w, http.StatusBadRequest, "invalid offset")
+						return
+					}
+					offset = n
+				}
+				var categoryID *int64
+				if raw := r.URL.Query().Get("category_id"); raw != "" {
+					n, err := strconv.ParseInt(raw, 10, 64)
+					if err != nil {
+						writeError(w, http.StatusBadRequest, "invalid category_id")
+						return
+					}
+					categoryID = &n
+				}
+				items, err := catalog.ListProducts(r.Context(), application.ProductFilter{Search: r.URL.Query().Get("search"), CategoryID: categoryID, Limit: limit, Offset: offset})
+				if errors.Is(err, application.ErrInvalidCatalogItem) {
+					writeError(w, http.StatusBadRequest, "invalid product filters")
+					return
+				}
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, "could not load products")
+					return
+				}
+				writeJSON(w, http.StatusOK, items)
+			})))
+			mux.Handle("POST /v1/products", RequirePermission(auth, "product.create", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var input struct {
+					CategoryID  *int64 `json:"category_id"`
+					SKU         string `json:"sku"`
+					Name        string `json:"name"`
+					Description string `json:"description"`
+					PriceMinor  int64  `json:"price_minor"`
+					Currency    string `json:"currency"`
+				}
+				if err := decodeJSON(w, r, &input); err != nil {
+					writeError(w, http.StatusBadRequest, "invalid request")
+					return
+				}
+				item, err := catalog.CreateProduct(r.Context(), application.Product{CategoryID: input.CategoryID, SKU: input.SKU, Name: input.Name, Description: input.Description, PriceMinor: input.PriceMinor, Currency: input.Currency})
+				if errors.Is(err, application.ErrInvalidCatalogItem) {
+					writeError(w, http.StatusBadRequest, "invalid product")
+					return
+				}
+				if errors.Is(err, application.ErrDuplicateSKU) {
+					writeError(w, http.StatusConflict, "SKU already exists")
+					return
+				}
+				if errors.Is(err, application.ErrCategoryNotFound) {
+					writeError(w, http.StatusBadRequest, "category not found")
+					return
+				}
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, "could not create product")
+					return
+				}
+				writeJSON(w, http.StatusCreated, item)
 			})))
 		}
 	}
