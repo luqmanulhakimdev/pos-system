@@ -12,9 +12,11 @@ Pragmatic hexagonal architecture separates domain rules, application use cases, 
 - PostgreSQL schema migrations applied at startup under an advisory lock
 - Seeded roles and granular permissions
 - Transactional checkout and stock adjustment use cases, with stock movements, price snapshots, server-calculated totals, and audit records
+- Hashed bearer sessions, one-time administrator bootstrap, and database-backed permission middleware
+- Order payment orchestration through a deterministic mock provider with retry-safe idempotency keys
 - Docker Compose local environment and GitHub Actions CI with a PostgreSQL integration-test service
 
-The HTTP business endpoints are still in progress; checkout and inventory change use cases use PostgreSQL transactions; concurrent oversell protection is covered by a CI integration test.
+Checkout and inventory use cases use PostgreSQL transactions; concurrent oversell protection is covered by a CI integration test. Authentication and payment endpoints are available; catalog, customer, checkout, refund, and cancellation HTTP routes remain in progress.
 
 ## Tech stack
 
@@ -32,6 +34,7 @@ docker compose up --build
 # in another terminal
 curl -i http://localhost:8080/healthz
 curl -i http://localhost:8080/readyz
+curl -i -X POST http://localhost:8080/v1/auth/login -H 'Content-Type: application/json' -d '{"email":"admin@example.com","password":"replace-with-a-strong-password"}'
 ```
 
 The Compose database credentials are for local development only. Do not reuse them outside local development.
@@ -56,7 +59,7 @@ curl -i http://localhost:8080/healthz
 curl -i http://localhost:8080/readyz
 ```
 
-See [docs/api.md](docs/api.md) and the [OpenAPI contract](docs/openapi.yaml). Business routes will be added with their use cases.
+See [docs/api.md](docs/api.md) and the [OpenAPI contract](docs/openapi.yaml). The demo payment provider is deterministic and accepts no card credentials; do not send real card data.
 
 ## Testing
 
@@ -74,10 +77,11 @@ Copy `.env.example` to `.env`, start PostgreSQL, and set `ADMIN_EMAIL` and `ADMI
 
 ## Design decisions
 
-- Stock changes use stock movements; checkout will apply inventory balance changes and movements in the same transaction while locking inventory rows.
+- Stock changes use stock movements; checkout applies inventory balance changes and movements in the same transaction while locking inventory rows.
 - The server calculates order totals from persisted product prices and stores unit price snapshots on order items.
+- Payment attempts are persisted before provider calls; retries reuse the same payment attempt key, and order/payment state updates are committed together after the provider responds.
 - Explicit order states are `PENDING`, `CONFIRMED`, `PAID`, `CANCELLED`, and `REFUNDED`; valid transitions are documented in [architecture](docs/architecture.md).
 
 ## Future improvements
 
-Implement catalog and user APIs, transactional checkout and cancellation, authentication and RBAC enforcement, payment provider integration, audit event writing, and operational metrics and tracing.
+Implement catalog and user management APIs, checkout and cancellation routes, refunds, rate limiting, audit event coverage, and operational metrics and tracing.

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/luqmanulhakimdev/pos-system/internal/application"
+	"github.com/luqmanulhakimdev/pos-system/internal/infrastructure/payment"
 	"github.com/luqmanulhakimdev/pos-system/internal/infrastructure/postgres"
 	httpapi "github.com/luqmanulhakimdev/pos-system/internal/interfaces/http"
 )
@@ -38,8 +39,12 @@ func run() error {
 		addr = ":8080"
 	}
 	server := &http.Server{
-		Addr:              addr,
-		Handler:           httpapi.NewRouter(pool.Ping, application.NewAuthService(postgres.NewAuthStore(pool), 15*time.Minute)),
+		Addr: addr,
+		Handler: httpapi.NewRouter(
+			pool.Ping,
+			application.NewAuthService(postgres.NewAuthStore(pool), 15*time.Minute),
+			application.NewPayments(postgres.NewPaymentStore(pool), payment.NewMockProvider()),
+		),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 

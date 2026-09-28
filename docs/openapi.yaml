@@ -51,6 +51,23 @@ paths:
       responses:
         '204': { description: Session revoked }
         '401': { description: Missing or invalid bearer token }
+  /v1/orders/{orderID}/payments:
+    post:
+      operationId: chargeOrder
+      summary: Charge an order using the configured payment provider
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: orderID
+          in: path
+          required: true
+          schema: { type: integer, format: int64, minimum: 1 }
+      responses:
+        '200': { description: Payment attempt result }
+        '400': { description: Invalid order identifier or payment response }
+        '401': { description: Missing or invalid bearer token }
+        '403': { description: User lacks payment.create permission }
+        '409': { description: Order is not payable }
+        '502': { description: Payment provider unavailable }
   /readyz:
     get:
       operationId: readinessCheck

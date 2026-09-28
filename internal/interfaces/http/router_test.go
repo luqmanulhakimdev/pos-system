@@ -46,7 +46,7 @@ func TestHealthz(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 
-	NewRouter(nil, nil).ServeHTTP(recorder, request)
+	NewRouter(nil, nil, nil).ServeHTTP(recorder, request)
 
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
@@ -58,7 +58,7 @@ func TestHealthz(t *testing.T) {
 
 func TestLoginMeAndLogout(t *testing.T) {
 	store := &testAuthStore{}
-	router := NewRouter(func(context.Context) error { return nil }, application.NewAuthService(store, time.Hour))
+	router := NewRouter(func(context.Context) error { return nil }, application.NewAuthService(store, time.Hour), nil)
 	login := httptest.NewRequest(http.MethodPost, "/v1/auth/login", strings.NewReader(`{"email":"admin@example.com","password":"password-strong"}`))
 	loginRecorder := httptest.NewRecorder()
 	router.ServeHTTP(loginRecorder, login)
@@ -86,7 +86,7 @@ func TestLoginMeAndLogout(t *testing.T) {
 }
 
 func TestAuthenticatedAndPermissionMiddlewareReject(t *testing.T) {
-	router := NewRouter(nil, application.NewAuthService(&testAuthStore{}, time.Hour))
+	router := NewRouter(nil, application.NewAuthService(&testAuthStore{}, time.Hour), nil)
 	request := httptest.NewRequest(http.MethodGet, "/v1/me", nil)
 	recorder := httptest.NewRecorder()
 	router.ServeHTTP(recorder, request)
@@ -110,7 +110,7 @@ func TestHealthzRejectsOtherMethods(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodPost, "/healthz", nil)
 
-	NewRouter(nil, nil).ServeHTTP(recorder, request)
+	NewRouter(nil, nil, nil).ServeHTTP(recorder, request)
 
 	if recorder.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusMethodNotAllowed)
@@ -131,7 +131,7 @@ func TestReadinessChecksDatabase(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			recorder := httptest.NewRecorder()
 			request := httptest.NewRequest(http.MethodGet, "/readyz", nil)
-			NewRouter(tt.check, nil).ServeHTTP(recorder, request)
+			NewRouter(tt.check, nil, nil).ServeHTTP(recorder, request)
 			if recorder.Code != tt.want {
 				t.Fatalf("status = %d, want %d", recorder.Code, tt.want)
 			}

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -13,7 +14,7 @@ import (
 )
 
 // NewRouter builds the HTTP surface exposed by the service.
-func NewRouter(checkDatabase func(context.Context) error, auth *application.AuthService) http.Handler {
+func NewRouter(checkDatabase func(context.Context) error, auth *application.AuthService, payments *application.Payments) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -63,6 +64,30 @@ func NewRouter(checkDatabase func(context.Context) error, auth *application.Auth
 			}
 			w.WriteHeader(http.StatusNoContent)
 		})))
+		if payments != nil {
+			mux.Handle("POST /v1/orders/{orderID}/payments", RequirePermission(auth, "payment.create", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				orderID, err := strconv.ParseInt(r.PathValue("orderID"), 10, 64)
+				if err != nil || orderID <= 0 {
+					writeError(w, http.StatusBadRequest, "invalid order id")
+					return
+				}
+				user := UserFromContext(r.Context())
+				payment, err := payments.ChargeOrder(r.Context(), orderID, user.ID)
+				if errors.Is(err, application.ErrOrderNotPayable) {
+					writeError(w, http.StatusConflict, "order is not payable")
+					return
+				}
+				if errors.Is(err, application.ErrInvalidPayment) {
+					writeError(w, http.StatusBadRequest, "invalid payment request")
+					return
+				}
+				if err != nil {
+					writeError(w, http.StatusBadGateway, "payment provider unavailable")
+					return
+				}
+				writeJSON(w, http.StatusOK, payment)
+			})))
+		}
 	}
 	return mux
 }
