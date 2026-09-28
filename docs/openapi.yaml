@@ -246,6 +246,23 @@ paths:
         '401': { description: Missing or invalid bearer token }
         '403': { description: User lacks customer.create permission }
         '409': { description: Email is already registered }
+  /v1/reports/sales:
+    get:
+      operationId: getSalesReport
+      summary: Summarize paid and refunded orders by currency
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: from, in: query, required: true, schema: { type: string, format: date } }
+        - { name: to, in: query, required: true, schema: { type: string, format: date } }
+      responses:
+        '200':
+          description: Gross sales, successful refunds, and net sales for the inclusive date range
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SalesReport' }
+        '400': { description: Invalid date or range greater than 366 days }
+        '401': { description: Missing or invalid bearer token }
+        '403': { description: User lacks report.read permission }
   /v1/inventory/{productID}:
     get:
       operationId: getInventory
@@ -309,6 +326,24 @@ paths:
                 type: string
               example: ok
 components:
+  schemas:
+    SalesReport:
+      type: object
+      required: [from, to, currencies]
+      properties:
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        currencies:
+          type: array
+          items:
+            type: object
+            required: [currency, paid_order_count, gross_minor, refunded_minor, net_minor]
+            properties:
+              currency: { type: string, pattern: '^[A-Z]{3}$' }
+              paid_order_count: { type: integer, format: int64, minimum: 0 }
+              gross_minor: { type: integer, format: int64, minimum: 0 }
+              refunded_minor: { type: integer, format: int64, minimum: 0 }
+              net_minor: { type: integer, format: int64 }
   securitySchemes:
     bearerAuth:
       type: http

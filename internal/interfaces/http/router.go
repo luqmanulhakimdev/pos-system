@@ -15,7 +15,7 @@ import (
 )
 
 // NewRouter builds the HTTP surface exposed by the service.
-func NewRouter(checkDatabase func(context.Context) error, auth *application.AuthService, payments *application.Payments, checkout *application.Checkout, catalog *application.Catalog, inventory *application.InventoryService, customers *application.Customers, cancelOrder *application.CancelOrder, refunds *application.Refunds) http.Handler {
+func NewRouter(checkDatabase func(context.Context) error, auth *application.AuthService, payments *application.Payments, checkout *application.Checkout, catalog *application.Catalog, inventory *application.InventoryService, customers *application.Customers, cancelOrder *application.CancelOrder, refunds *application.Refunds, salesReports *application.SalesReports) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -201,6 +201,20 @@ func NewRouter(checkDatabase func(context.Context) error, auth *application.Auth
 					w.Header().Set("Idempotent-Replay", "true")
 				}
 				writeJSON(w, http.StatusCreated, refund)
+			})))
+		}
+		if salesReports != nil {
+			mux.Handle("GET /v1/reports/sales", RequirePermission(auth, "report.read", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				report, err := salesReports.Execute(r.Context(), r.URL.Query().Get("from"), r.URL.Query().Get("to"))
+				if errors.Is(err, application.ErrInvalidReportRange) {
+					writeError(w, http.StatusBadRequest, "from and to must be valid dates (YYYY-MM-DD), no more than 366 days apart")
+					return
+				}
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, "could not load sales report")
+					return
+				}
+				writeJSON(w, http.StatusOK, report)
 			})))
 		}
 		if catalog != nil {
