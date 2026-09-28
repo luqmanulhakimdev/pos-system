@@ -43,6 +43,8 @@ type CatalogStore interface {
 	ListCategories(context.Context) ([]Category, error)
 	CreateProduct(context.Context, Product) (Product, error)
 	ListProducts(context.Context, ProductFilter) ([]Product, error)
+	UpdateProduct(context.Context, Product) (Product, error)
+	DeactivateProduct(context.Context, int64) error
 }
 
 type Catalog struct{ store CatalogStore }
@@ -81,6 +83,26 @@ func (c *Catalog) ListProducts(ctx context.Context, filter ProductFilter) ([]Pro
 	}
 	filter.Search = strings.TrimSpace(filter.Search)
 	return c.store.ListProducts(ctx, filter)
+}
+
+func (c *Catalog) UpdateProduct(ctx context.Context, product Product) (Product, error) {
+	product.SKU = strings.TrimSpace(product.SKU)
+	product.Name = strings.TrimSpace(product.Name)
+	product.Description = strings.TrimSpace(product.Description)
+	if product.Currency == "" {
+		product.Currency = "IDR"
+	}
+	if c.store == nil || product.ID <= 0 || product.SKU == "" || len(product.SKU) > 64 || product.Name == "" || len(product.Name) > 200 || len(product.Description) > 2000 || product.PriceMinor < 0 || product.CategoryID != nil && *product.CategoryID <= 0 || !validCatalogCurrency(product.Currency) {
+		return Product{}, ErrInvalidCatalogItem
+	}
+	return c.store.UpdateProduct(ctx, product)
+}
+
+func (c *Catalog) DeactivateProduct(ctx context.Context, productID int64) error {
+	if c.store == nil || productID <= 0 {
+		return ErrInvalidCatalogItem
+	}
+	return c.store.DeactivateProduct(ctx, productID)
 }
 func validCatalogCurrency(currency string) bool {
 	if len(currency) != 3 {

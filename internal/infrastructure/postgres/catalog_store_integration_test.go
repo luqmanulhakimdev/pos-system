@@ -61,4 +61,15 @@ func TestCatalogStoreIntegration(t *testing.T) {
 	if _, err := store.CreateProduct(ctx, application.Product{SKU: product.SKU, Name: "Duplicate", Currency: "IDR"}); err != application.ErrDuplicateSKU {
 		t.Fatalf("duplicate SKU error=%v", err)
 	}
+	updated, err := store.UpdateProduct(ctx, application.Product{ID: productID, CategoryID: product.CategoryID, SKU: product.SKU, Name: "Updated Coffee", PriceMinor: 13000, Currency: "IDR"})
+	if err != nil || updated.Name != "Updated Coffee" || updated.PriceMinor != 13000 {
+		t.Fatalf("updated product=%#v err=%v", updated, err)
+	}
+	if err := store.DeactivateProduct(ctx, productID); err != nil {
+		t.Fatal(err)
+	}
+	activeProducts, err := store.ListProducts(ctx, application.ProductFilter{Search: product.SKU, Limit: 10})
+	if err != nil || len(activeProducts) != 0 {
+		t.Fatalf("deactivated products=%#v err=%v", activeProducts, err)
+	}
 }

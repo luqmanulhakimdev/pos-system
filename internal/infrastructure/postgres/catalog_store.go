@@ -108,6 +108,52 @@ func (s *CatalogStore) ListProducts(ctx context.Context, filter application.Prod
 	return products, nil
 }
 
+func (s *CatalogStore) UpdateProduct(ctx context.Context, product application.Product) (application.Product, error) {
+	var categoryID pgtype.Int8
+	err := s.pool.QueryRow(ctx, `UPDATE products SET category_id=$2,sku=$3,name=$4,description=$5,price_minor=$6,currency=$7,updated_at=now()
+		WHERE id=$1 AND active=TRUE RETURNING id,category_id,sku,name,description,price_minor,currency,active`, product.ID, product.CategoryID, product.SKU, product.Name, product.Description, product.PriceMinor, product.Currency).Scan(
+		&product.ID, &categoryID, &product.SKU, &product.Name, &product.Description, &product.PriceMinor, &product.Currency, &product.Active)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return application.Product{}, application.ErrProductUnavailable
+	}
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) {
+			switch pgErr.Code {
+			case "23505":
+				return application.Product{}, application.ErrDuplicateSKU
+			case "23503":
+				return application.Product{}, application.ErrCategoryNotFound
+			}
+		}
+		return application.Product{}, fmt.Errorf("update product: %w", err)
+	}
+	if categoryID.Valid {
+		product.CategoryID = &categoryID.Int64
+	} else {
+		product.CategoryID = nil
+	}
+	return product, nil
+}
+
+func (s *CatalogStore) DeactivateProduct(ctx context.Context, productID int64) error {
+	tag, err := s.pool.Exec(ctx, "UPDATE products SET active=FALSE,updated_at=now() WHERE id=$1 AND active=TRUE", productID)
+	if err != nil {
+		return fmt.Errorf("deactivate product: %w", err)
+	}
+	if tag.RowsAffected() == 1 {
+		return nil
+	}
+	var exists bool
+	if err := s.pool.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM products WHERE id=$1)", productID).Scan(&exists); err != nil {
+		return fmt.Errorf("check product for deactivation: %w", err)
+	}
+	if !exists {
+		return application.ErrProductUnavailable
+	}
+	return nil
+}
+
 var _ application.CatalogStore = (*CatalogStore)(nil)
 
 func (s *CatalogStore) GetInventory(ctx context.Context, productID int64) (domain.Inventory, error) {

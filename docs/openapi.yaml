@@ -245,6 +245,47 @@ paths:
         '401': { description: Missing or invalid bearer token }
         '403': { description: User lacks product.create permission }
         '409': { description: SKU already exists }
+  /v1/products/{productID}:
+    put:
+      operationId: updateProduct
+      summary: Update an active catalog product
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: productID, in: path, required: true, schema: { type: integer, format: int64, minimum: 1 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [sku, name, price_minor]
+              properties:
+                category_id: { type: integer, format: int64, minimum: 1 }
+                sku: { type: string, minLength: 1, maxLength: 64 }
+                name: { type: string, minLength: 1, maxLength: 200 }
+                description: { type: string, maxLength: 2000 }
+                price_minor: { type: integer, format: int64, minimum: 0 }
+                currency: { type: string, pattern: '^[A-Z]{3}$', default: IDR }
+      responses:
+        '200': { description: Product updated }
+        '400': { description: Invalid product or category }
+        '401': { description: Missing or invalid bearer token }
+        '403': { description: User lacks product.update permission }
+        '404': { description: Active product not found }
+        '409': { description: SKU already exists }
+    delete:
+      operationId: deactivateProduct
+      summary: Deactivate a product while retaining order history
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: productID, in: path, required: true, schema: { type: integer, format: int64, minimum: 1 } }
+      responses:
+        '204': { description: Product deactivated; existing order references are retained }
+        '400': { description: Invalid product identifier }
+        '401': { description: Missing or invalid bearer token }
+        '403': { description: User lacks product.delete permission }
+        '404': { description: Product not found }
   /v1/customers:
     get:
       operationId: listCustomers

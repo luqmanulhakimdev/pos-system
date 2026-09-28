@@ -368,6 +368,65 @@ func NewRouter(checkDatabase func(context.Context) error, auth *application.Auth
 				}
 				writeJSON(w, http.StatusCreated, item)
 			})))
+			mux.Handle("PUT /v1/products/{productID}", RequirePermission(auth, "product.update", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				productID, err := strconv.ParseInt(r.PathValue("productID"), 10, 64)
+				if err != nil || productID <= 0 {
+					writeError(w, http.StatusBadRequest, "invalid product id")
+					return
+				}
+				var input struct {
+					CategoryID  *int64 `json:"category_id"`
+					SKU         string `json:"sku"`
+					Name        string `json:"name"`
+					Description string `json:"description"`
+					PriceMinor  int64  `json:"price_minor"`
+					Currency    string `json:"currency"`
+				}
+				if err := decodeJSON(w, r, &input); err != nil {
+					writeError(w, http.StatusBadRequest, "invalid request")
+					return
+				}
+				item, err := catalog.UpdateProduct(r.Context(), application.Product{ID: productID, CategoryID: input.CategoryID, SKU: input.SKU, Name: input.Name, Description: input.Description, PriceMinor: input.PriceMinor, Currency: input.Currency})
+				if errors.Is(err, application.ErrInvalidCatalogItem) {
+					writeError(w, http.StatusBadRequest, "invalid product")
+					return
+				}
+				if errors.Is(err, application.ErrProductUnavailable) {
+					writeError(w, http.StatusNotFound, "product unavailable")
+					return
+				}
+				if errors.Is(err, application.ErrDuplicateSKU) {
+					writeError(w, http.StatusConflict, "SKU already exists")
+					return
+				}
+				if errors.Is(err, application.ErrCategoryNotFound) {
+					writeError(w, http.StatusBadRequest, "category not found")
+					return
+				}
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, "could not update product")
+					return
+				}
+				writeJSON(w, http.StatusOK, item)
+			})))
+			mux.Handle("DELETE /v1/products/{productID}", RequirePermission(auth, "product.delete", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				productID, err := strconv.ParseInt(r.PathValue("productID"), 10, 64)
+				if err != nil || productID <= 0 {
+					writeError(w, http.StatusBadRequest, "invalid product id")
+					return
+				}
+				if err := catalog.DeactivateProduct(r.Context(), productID); errors.Is(err, application.ErrInvalidCatalogItem) {
+					writeError(w, http.StatusBadRequest, "invalid product id")
+					return
+				} else if errors.Is(err, application.ErrProductUnavailable) {
+					writeError(w, http.StatusNotFound, "product unavailable")
+					return
+				} else if err != nil {
+					writeError(w, http.StatusInternalServerError, "could not deactivate product")
+					return
+				}
+				w.WriteHeader(http.StatusNoContent)
+			})))
 		}
 		if inventory != nil {
 			mux.Handle("GET /v1/inventory/{productID}", RequirePermission(auth, "inventory.read", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

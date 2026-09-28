@@ -15,6 +15,7 @@ Base URL: `http://localhost:8080`.
 - `GET /v1/reports/sales?from=YYYY-MM-DD&to=YYYY-MM-DD` requires `report.read` and returns paid-order count, gross, refunded, and net amounts grouped by currency for an inclusive range of up to 366 days.
 - `GET /v1/categories` and `GET /v1/products` require `product.read`; product listing supports `search`, `category_id`, `limit`, and `offset` filters.
 - `POST /v1/categories` and `POST /v1/products` require `product.create`. Product prices use integer minor units and default to IDR if currency is omitted.
+- `PUT /v1/products/{productID}` requires `product.update`; `DELETE /v1/products/{productID}` requires `product.delete` and deactivates the product while retaining historical order snapshots.
 - `GET /v1/customers` requires `customer.read` and supports bounded search and pagination. `POST /v1/customers` requires `customer.create`, a name, and at least one of email or phone. Email addresses are normalized and unique; creation and its audit record commit together.
 - Creating a product also creates a zero-quantity inventory record. `GET /v1/inventory/{productID}` requires `inventory.read`; `POST /v1/inventory/{productID}/adjustments` requires `inventory.adjust` and records a stock movement and audit event in the same transaction.
 

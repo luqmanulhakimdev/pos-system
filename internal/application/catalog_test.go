@@ -28,6 +28,11 @@ func (s *catalogStoreStub) CreateProduct(_ context.Context, p Product) (Product,
 func (s *catalogStoreStub) ListProducts(context.Context, ProductFilter) ([]Product, error) {
 	return []Product{s.product}, nil
 }
+func (s *catalogStoreStub) UpdateProduct(_ context.Context, p Product) (Product, error) {
+	s.product = p
+	return p, nil
+}
+func (s *catalogStoreStub) DeactivateProduct(context.Context, int64) error { return nil }
 
 func TestCatalogNormalizesAndValidatesProducts(t *testing.T) {
 	store := &catalogStoreStub{}
@@ -52,5 +57,20 @@ func TestCatalogRejectsInvalidFiltersAndCreatesCategory(t *testing.T) {
 	}
 	if _, err := catalog.ListProducts(context.Background(), ProductFilter{Limit: 101}); err != ErrInvalidCatalogItem {
 		t.Fatalf("filter error=%v", err)
+	}
+}
+
+func TestCatalogUpdatesAndDeactivatesProduct(t *testing.T) {
+	store := &catalogStoreStub{}
+	catalog := NewCatalog(store)
+	updated, err := catalog.UpdateProduct(context.Background(), Product{ID: 9, SKU: " NEW-1 ", Name: " Updated ", PriceMinor: 2500})
+	if err != nil || updated.ID != 9 || updated.SKU != "NEW-1" || updated.Name != "Updated" || updated.Currency != "IDR" {
+		t.Fatalf("product=%#v err=%v", updated, err)
+	}
+	if err := catalog.DeactivateProduct(context.Background(), 9); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := catalog.UpdateProduct(context.Background(), Product{ID: 0, SKU: "SKU", Name: "Item"}); err != ErrInvalidCatalogItem {
+		t.Fatalf("invalid update error=%v", err)
 	}
 }
