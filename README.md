@@ -16,7 +16,7 @@ Pragmatic hexagonal architecture separates domain rules, application use cases, 
 - Order payment orchestration through a deterministic mock provider with retry-safe idempotency keys
 - Docker Compose local environment and GitHub Actions CI with a PostgreSQL integration-test service
 
-Checkout and inventory use cases use PostgreSQL transactions; concurrent oversell protection is covered by a CI integration test. Authentication, catalog, customer, inventory adjustment, checkout, and mock payment endpoints are available; refund and cancellation HTTP routes remain in progress.
+Checkout, cancellation, and inventory use cases use PostgreSQL transactions; concurrent oversell protection is covered by a CI integration test. Authentication, catalog, customer, inventory adjustment, checkout, mock payment, and unpaid order cancellation endpoints are available; payment refund routes remain in progress.
 
 ## Tech stack
 
@@ -84,4 +84,4 @@ Copy `.env.example` to `.env`, start PostgreSQL, and set `ADMIN_EMAIL` and `ADMI
 
 ## Future improvements
 
-Implement catalog and user management APIs, checkout and cancellation routes, refunds, rate limiting, audit event coverage, and operational metrics and tracing.
+Add payment refunds, order detail and history APIs, product and customer updates/deactivation, reporting, richer audit events, and operational metrics and tracing.

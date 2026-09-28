@@ -15,7 +15,7 @@ import (
 )
 
 // NewRouter builds the HTTP surface exposed by the service.
-func NewRouter(checkDatabase func(context.Context) error, auth *application.AuthService, payments *application.Payments, checkout *application.Checkout, catalog *application.Catalog, inventory *application.InventoryService, customers *application.Customers) http.Handler {
+func NewRouter(checkDatabase func(context.Context) error, auth *application.AuthService, payments *application.Payments, checkout *application.Checkout, catalog *application.Catalog, inventory *application.InventoryService, customers *application.Customers, cancelOrder *application.CancelOrder) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -118,6 +118,37 @@ func NewRouter(checkDatabase func(context.Context) error, auth *application.Auth
 					return
 				}
 				writeJSON(w, http.StatusCreated, order)
+			})))
+		}
+		if cancelOrder != nil {
+			mux.Handle("POST /v1/orders/{orderID}/cancel", RequirePermission(auth, "order.cancel", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				orderID, err := strconv.ParseInt(r.PathValue("orderID"), 10, 64)
+				if err != nil || orderID <= 0 {
+					writeError(w, http.StatusBadRequest, "invalid order id")
+					return
+				}
+				err = cancelOrder.Execute(r.Context(), orderID, UserFromContext(r.Context()).ID)
+				if errors.Is(err, application.ErrOrderNotFound) {
+					writeError(w, http.StatusNotFound, "order not found")
+					return
+				}
+				if errors.Is(err, application.ErrOrderPaymentBlocksCancellation) {
+					writeError(w, http.StatusConflict, "payment must be resolved before cancelling")
+					return
+				}
+				if errors.Is(err, domain.ErrInvalidOrderTransition) {
+					writeError(w, http.StatusConflict, "order cannot be cancelled from its current state")
+					return
+				}
+				if errors.Is(err, domain.ErrInvalidOrder) {
+					writeError(w, http.StatusBadRequest, "invalid order")
+					return
+				}
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, "order cancellation failed")
+					return
+				}
+				w.WriteHeader(http.StatusNoContent)
 			})))
 		}
 		if catalog != nil {

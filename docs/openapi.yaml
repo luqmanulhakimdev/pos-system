@@ -101,6 +101,20 @@ paths:
         '403': { description: User lacks order.create permission }
         '404': { description: Product is unavailable }
         '409': { description: Insufficient stock }
+  /v1/orders/{orderID}/cancel:
+    post:
+      operationId: cancelOrder
+      summary: Cancel a pending or confirmed order and restore its stock
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: orderID, in: path, required: true, schema: { type: integer, format: int64, minimum: 1 } }
+      responses:
+        '204': { description: Order cancelled; stock movement and audit event recorded }
+        '400': { description: Invalid order identifier }
+        '401': { description: Missing or invalid bearer token }
+        '403': { description: User lacks order.cancel permission }
+        '404': { description: Order not found }
+        '409': { description: Order state prevents cancellation or payment is still in progress }
   /v1/categories:
     get:
       operationId: listCategories

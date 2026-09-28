@@ -9,6 +9,7 @@ Base URL: `http://localhost:8080`.
 - `POST /v1/auth/logout` requires a bearer token and revokes that session. A revoked token returns `401` on subsequent requests.
 - `POST /v1/orders/{orderID}/payments` charges a payable order through the configured mock provider; it requires `payment.create` and uses a stable provider idempotency key for retries. It returns `409` for orders that cannot be paid and `502` when the provider is unavailable.
 - `POST /v1/orders/checkout` creates a pending order for the authenticated cashier, derives prices from PostgreSQL, and atomically records order items, stock movements, inventory updates, and audit data. It requires `order.create`.
+- `POST /v1/orders/{orderID}/cancel` requires `order.cancel`, cancels only pending or confirmed unpaid orders, and returns stock with cancellation movements in the same audited transaction. An order with a pending or authorized payment must be reconciled before it can be cancelled.
 - `GET /v1/categories` and `GET /v1/products` require `product.read`; product listing supports `search`, `category_id`, `limit`, and `offset` filters.
 - `POST /v1/categories` and `POST /v1/products` require `product.create`. Product prices use integer minor units and default to IDR if currency is omitted.
 - `GET /v1/customers` requires `customer.read` and supports bounded search and pagination. `POST /v1/customers` requires `customer.create`, a name, and at least one of email or phone. Email addresses are normalized and unique; creation and its audit record commit together.
