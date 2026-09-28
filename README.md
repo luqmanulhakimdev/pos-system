@@ -14,7 +14,7 @@ Pragmatic hexagonal architecture separates domain rules, application use cases, 
 - Domain rules for stock movements, order price snapshots, order totals, and lifecycle transitions
 - Docker Compose local environment and GitHub Actions CI with a PostgreSQL integration-test service
 
-The HTTP business endpoints and transactional checkout workflow are still in progress.
+The HTTP business endpoints are still in progress; the checkout use case and PostgreSQL transaction adapter are implemented and integration-tested in CI.
 
 ## Tech stack
 
