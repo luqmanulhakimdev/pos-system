@@ -106,7 +106,7 @@ func (s *PaymentStore) FinalizePayment(ctx context.Context, payment application.
 		}
 	}
 	if _, err := tx.Exec(ctx, `INSERT INTO audit_logs(actor_user_id,action,entity_type,entity_id,details)
-		VALUES($1,$2,'payment',$3,jsonb_build_object('order_id',$4,'status',$5,'amount_minor',$6,'currency',$7))`, actorID, "payment."+string(result.Status), fmt.Sprint(payment.ID), payment.OrderID, string(result.Status), payment.AmountMinor, payment.Currency); err != nil {
+		VALUES($1,$2,'payment',$3,jsonb_build_object('order_id',$4::bigint,'status',$5::text,'amount_minor',$6::bigint,'currency',$7::text))`, actorID, "payment."+string(result.Status), fmt.Sprint(payment.ID), payment.OrderID, string(result.Status), payment.AmountMinor, payment.Currency); err != nil {
 		return application.Payment{}, fmt.Errorf("audit payment: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
