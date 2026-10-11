@@ -22,7 +22,7 @@ func TestUserManagementStoreIntegrationCreateAssignAndDeactivate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer pool.Close()
+	t.Cleanup(pool.Close)
 	if err := ApplyMigrations(ctx, pool); err != nil {
 		t.Fatal(err)
 	}
@@ -31,6 +31,10 @@ func TestUserManagementStoreIntegrationCreateAssignAndDeactivate(t *testing.T) {
 	if err := pool.QueryRow(ctx, `INSERT INTO users(email,password_hash,display_name) VALUES($1,'unused','Admin fixture') RETURNING id`, "user-management-"+suffix+"@example.test").Scan(&adminID); err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), "DELETE FROM audit_logs WHERE actor_user_id=$1", adminID)
+		_, _ = pool.Exec(context.Background(), "DELETE FROM users WHERE id=$1", adminID)
+	})
 	if err := pool.QueryRow(ctx, "SELECT id FROM roles WHERE name='admin'").Scan(&adminRoleID); err != nil {
 		t.Fatal(err)
 	}
@@ -44,8 +48,7 @@ func TestUserManagementStoreIntegrationCreateAssignAndDeactivate(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		_, _ = pool.Exec(context.Background(), "DELETE FROM audit_logs WHERE actor_user_id=$1", adminID)
-		_, _ = pool.Exec(context.Background(), "DELETE FROM users WHERE id IN ($1,$2)", adminID, user.ID)
+		_, _ = pool.Exec(context.Background(), "DELETE FROM users WHERE id=$1", user.ID)
 	})
 	if err := service.SetRole(ctx, adminID, user.ID, "cashier"); err != nil {
 		t.Fatal(err)

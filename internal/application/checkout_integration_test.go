@@ -26,7 +26,7 @@ func TestCheckoutIntegrationPreventsConcurrentOversell(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer pool.Close()
+	t.Cleanup(pool.Close)
 	if err := postgres.ApplyMigrations(ctx, pool); err != nil {
 		t.Fatal(err)
 	}

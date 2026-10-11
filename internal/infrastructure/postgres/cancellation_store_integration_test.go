@@ -23,7 +23,7 @@ func TestCancellationStoreIntegrationRestoresStockAtomically(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer pool.Close()
+	t.Cleanup(pool.Close)
 	if err := ApplyMigrations(ctx, pool); err != nil {
 		t.Fatal(err)
 	}
