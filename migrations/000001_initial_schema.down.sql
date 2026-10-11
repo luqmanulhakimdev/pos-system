@@ -1,0 +1,14 @@
+DROP TABLE IF EXISTS audit_logs;
+DROP TABLE IF EXISTS payments;
+DROP TABLE IF EXISTS stock_movements;
+DROP TABLE IF EXISTS order_items;
+DROP TABLE IF EXISTS orders;
+DROP TABLE IF EXISTS customers;
+DROP TABLE IF EXISTS inventory;
+DROP TABLE IF EXISTS products;
+DROP TABLE IF EXISTS categories;
+DROP TABLE IF EXISTS role_permissions;
+DROP TABLE IF EXISTS user_roles;
+DROP TABLE IF EXISTS permissions;
+DROP TABLE IF EXISTS roles;
+DROP TABLE IF EXISTS users;

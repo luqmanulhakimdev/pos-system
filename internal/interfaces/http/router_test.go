@@ -1,0 +1,281 @@
+package httpapi
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/luqmanulhakimdev/pos-system/internal/application"
+)
+
+type testAuthStore struct {
+	hash        string
+	revoked     bool
+	permissions []string
+}
+
+func (s *testAuthStore) VerifyCredentials(_ context.Context, email, password string) (int64, error) {
+	if email != "admin@example.com" || password != "password-strong" {
+		return 0, application.ErrInvalidCredentials
+	}
+	return 1, nil
+}
+func (s *testAuthStore) CreateSession(_ context.Context, _ int64, hash string, _ time.Time) error {
+	s.hash = hash
+	return nil
+}
+func (s *testAuthStore) LoadSession(_ context.Context, hash string) (application.AuthenticatedUser, error) {
+	if hash != s.hash || s.revoked {
+		return application.AuthenticatedUser{}, application.ErrInvalidSession
+	}
+	permissions := s.permissions
+	if permissions == nil {
+		permissions = []string{"orders.read"}
+	}
+	return application.AuthenticatedUser{ID: 1, Email: "admin@example.com", Permissions: permissions}, nil
+}
+
+type customerHTTPStore struct {
+	createdBy     int64
+	updatedBy     int64
+	deactivatedBy int64
+	deactivatedID int64
+	customer      application.Customer
+}
+
+type userManagementHTTPStore struct {
+	createdBy int64
+	created   bool
+}
+
+func (s *userManagementHTTPStore) CreateManagedUser(_ context.Context, actorID int64, email, displayName string, _ []byte, role string) (application.ManagedUser, error) {
+	s.createdBy = actorID
+	s.created = true
+	return application.ManagedUser{ID: 2, Email: email, DisplayName: displayName, Active: true, Roles: []string{role}}, nil
+}
+func (*userManagementHTTPStore) ListManagedUsers(context.Context) ([]application.ManagedUser, error) {
+	return []application.ManagedUser{}, nil
+}
+func (*userManagementHTTPStore) SetManagedUserRole(context.Context, int64, int64, string) error {
+	return nil
+}
+func (*userManagementHTTPStore) DeactivateManagedUser(context.Context, int64, int64) error {
+	return nil
+}
+
+func (s *customerHTTPStore) CreateCustomer(_ context.Context, actorID int64, customer application.Customer) (application.Customer, error) {
+	s.createdBy = actorID
+	customer.ID = 9
+	s.customer = customer
+	return customer, nil
+}
+func (s *customerHTTPStore) ListCustomers(context.Context, application.CustomerFilter) ([]application.Customer, error) {
+	return []application.Customer{s.customer}, nil
+}
+func (s *customerHTTPStore) UpdateCustomer(_ context.Context, actorID, customerID int64, customer application.Customer) (application.Customer, error) {
+	s.updatedBy = actorID
+	customer.ID = customerID
+	s.customer = customer
+	return customer, nil
+}
+func (s *customerHTTPStore) DeactivateCustomer(_ context.Context, actorID, customerID int64) error {
+	s.deactivatedBy = actorID
+	s.deactivatedID = customerID
+	return nil
+}
+func (s *testAuthStore) RevokeSession(_ context.Context, hash string) error {
+	if hash != s.hash || s.revoked {
+		return application.ErrInvalidSession
+	}
+	s.revoked = true
+	return nil
+}
+
+func TestHealthz(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+
+	NewRouter(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil).ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+	if got := recorder.Body.String(); got != "ok\n" {
+		t.Fatalf("body = %q, want %q", got, "ok\n")
+	}
+}
+
+func TestLoginMeAndLogout(t *testing.T) {
+	store := &testAuthStore{}
+	router := NewRouter(func(context.Context) error { return nil }, application.NewAuthService(store, time.Hour), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	login := httptest.NewRequest(http.MethodPost, "/v1/auth/login", strings.NewReader(`{"email":"admin@example.com","password":"password-strong"}`))
+	loginRecorder := httptest.NewRecorder()
+	router.ServeHTTP(loginRecorder, login)
+	if loginRecorder.Code != http.StatusCreated {
+		t.Fatalf("login status = %d, body %s", loginRecorder.Code, loginRecorder.Body)
+	}
+	var session application.LoginSession
+	if err := json.Unmarshal(loginRecorder.Body.Bytes(), &session); err != nil {
+		t.Fatal(err)
+	}
+	me := httptest.NewRequest(http.MethodGet, "/v1/me", nil)
+	me.Header.Set("Authorization", "Bearer "+session.Token)
+	meRecorder := httptest.NewRecorder()
+	router.ServeHTTP(meRecorder, me)
+	if meRecorder.Code != http.StatusOK || !strings.Contains(meRecorder.Body.String(), "orders.read") {
+		t.Fatalf("me response = %d %s", meRecorder.Code, meRecorder.Body)
+	}
+	logout := httptest.NewRequest(http.MethodPost, "/v1/auth/logout", nil)
+	logout.Header.Set("Authorization", "Bearer "+session.Token)
+	logoutRecorder := httptest.NewRecorder()
+	router.ServeHTTP(logoutRecorder, logout)
+	if logoutRecorder.Code != http.StatusNoContent {
+		t.Fatalf("logout status = %d", logoutRecorder.Code)
+	}
+}
+
+func TestAuthenticatedAndPermissionMiddlewareReject(t *testing.T) {
+	router := NewRouter(nil, application.NewAuthService(&testAuthStore{}, time.Hour), nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	request := httptest.NewRequest(http.MethodGet, "/v1/me", nil)
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want unauthorized", recorder.Code)
+	}
+	store := &testAuthStore{}
+	hash, _ := application.HashSessionToken("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
+	store.hash = hash
+	permissionHandler := RequirePermission(application.NewAuthService(store, time.Hour), "products.write", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }))
+	request = httptest.NewRequest(http.MethodGet, "/protected", nil)
+	request.Header.Set("Authorization", "Bearer AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
+	recorder = httptest.NewRecorder()
+	permissionHandler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want forbidden", recorder.Code)
+	}
+}
+
+func TestHealthzRejectsOtherMethods(t *testing.T) {
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/healthz", nil)
+
+	NewRouter(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil).ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusMethodNotAllowed)
+	}
+}
+
+func TestReadinessChecksDatabase(t *testing.T) {
+	tests := []struct {
+		name  string
+		check func(context.Context) error
+		want  int
+	}{
+		{"healthy", func(context.Context) error { return nil }, http.StatusOK},
+		{"database unavailable", func(context.Context) error { return errors.New("connection refused") }, http.StatusServiceUnavailable},
+		{"missing database check", nil, http.StatusServiceUnavailable},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+			NewRouter(tt.check, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil).ServeHTTP(recorder, request)
+			if recorder.Code != tt.want {
+				t.Fatalf("status = %d, want %d", recorder.Code, tt.want)
+			}
+		})
+	}
+}
+
+func TestCustomerCreationRequiresPermissionAndPassesActor(t *testing.T) {
+	token := "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+	hash, _ := application.HashSessionToken(token)
+	store := &testAuthStore{hash: hash, permissions: []string{"customer.create"}}
+	customerStore := &customerHTTPStore{}
+	router := NewRouter(nil, application.NewAuthService(store, time.Hour), nil, nil, nil, nil, application.NewCustomers(customerStore), nil, nil, nil, nil, nil)
+	request := httptest.NewRequest(http.MethodPost, "/v1/customers", strings.NewReader(`{"name":"Ana","email":"ANA@example.com"}`))
+	request.Header.Set("Authorization", "Bearer "+token)
+	request.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusCreated || customerStore.createdBy != 1 || customerStore.customer.Email != "ana@example.com" {
+		t.Fatalf("status=%d actor=%d customer=%#v body=%s", recorder.Code, customerStore.createdBy, customerStore.customer, recorder.Body.String())
+	}
+	store.permissions = []string{"order.read"}
+	recorder = httptest.NewRecorder()
+	request = httptest.NewRequest(http.MethodPost, "/v1/customers", strings.NewReader(`{"name":"No Access","phone":"123"}`))
+	request.Header.Set("Authorization", "Bearer "+token)
+	request.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusForbidden {
+		t.Fatalf("unauthorized permission status=%d", recorder.Code)
+	}
+	store.permissions = []string{"order.read"}
+	request = httptest.NewRequest(http.MethodPatch, "/v1/customers/9", strings.NewReader(`{"name":"Updated Ana","phone":"0812"}`))
+	request.Header.Set("Authorization", "Bearer "+token)
+	request.Header.Set("Content-Type", "application/json")
+	recorder = httptest.NewRecorder()
+	router.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusForbidden {
+		t.Fatalf("unauthorized customer.update status=%d", recorder.Code)
+	}
+	store.permissions = []string{"customer.update"}
+	request = httptest.NewRequest(http.MethodPatch, "/v1/customers/9", strings.NewReader(`{"name":"Updated Ana","phone":"0812"}`))
+	request.Header.Set("Authorization", "Bearer "+token)
+	request.Header.Set("Content-Type", "application/json")
+	recorder = httptest.NewRecorder()
+	router.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK || customerStore.updatedBy != 1 || customerStore.customer.Name != "Updated Ana" {
+		t.Fatalf("customer update status=%d actor=%d customer=%#v body=%s", recorder.Code, customerStore.updatedBy, customerStore.customer, recorder.Body.String())
+	}
+	store.permissions = []string{"order.read"}
+	request = httptest.NewRequest(http.MethodDelete, "/v1/customers/9", nil)
+	request.Header.Set("Authorization", "Bearer "+token)
+	recorder = httptest.NewRecorder()
+	router.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusForbidden {
+		t.Fatalf("unauthorized customer.delete status=%d", recorder.Code)
+	}
+	store.permissions = []string{"customer.delete"}
+	request = httptest.NewRequest(http.MethodDelete, "/v1/customers/9", nil)
+	request.Header.Set("Authorization", "Bearer "+token)
+	recorder = httptest.NewRecorder()
+	router.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusNoContent || customerStore.deactivatedBy != 1 || customerStore.deactivatedID != 9 {
+		t.Fatalf("customer deactivation status=%d actor=%d id=%d body=%s", recorder.Code, customerStore.deactivatedBy, customerStore.deactivatedID, recorder.Body.String())
+	}
+}
+
+func TestUserManagementRequiresPermissionAndCreatesUser(t *testing.T) {
+	token := "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+	hash, _ := application.HashSessionToken(token)
+	authStore := &testAuthStore{hash: hash, permissions: []string{"user.manage"}}
+	userStore := &userManagementHTTPStore{}
+	router := NewRouter(nil, application.NewAuthService(authStore, time.Hour), nil, nil, nil, nil, nil, nil, nil, nil, nil, application.NewUserManagement(userStore))
+	request := httptest.NewRequest(http.MethodPost, "/v1/users", strings.NewReader(`{"email":"staff@example.com","display_name":"Staff","password":"a-long-password-123","role":"cashier"}`))
+	request.Header.Set("Authorization", "Bearer "+token)
+	request.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusCreated || userStore.createdBy != 1 || !userStore.created {
+		t.Fatalf("create status=%d actor=%d created=%v body=%s", recorder.Code, userStore.createdBy, userStore.created, recorder.Body.String())
+	}
+	if strings.Contains(recorder.Body.String(), "password") {
+		t.Fatalf("response exposed password/hash: %s", recorder.Body.String())
+	}
+	authStore.permissions = []string{"orders.read"}
+	request = httptest.NewRequest(http.MethodPost, "/v1/users", strings.NewReader(`{"email":"other@example.com","display_name":"Other","password":"a-long-password-123","role":"cashier"}`))
+	request.Header.Set("Authorization", "Bearer "+token)
+	request.Header.Set("Content-Type", "application/json")
+	recorder = httptest.NewRecorder()
+	router.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusForbidden {
+		t.Fatalf("missing user.manage status=%d, want forbidden", recorder.Code)
+	}
+}
