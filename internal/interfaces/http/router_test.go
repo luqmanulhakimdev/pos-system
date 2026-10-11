@@ -41,8 +41,11 @@ func (s *testAuthStore) LoadSession(_ context.Context, hash string) (application
 }
 
 type customerHTTPStore struct {
-	createdBy int64
-	customer  application.Customer
+	createdBy     int64
+	updatedBy     int64
+	deactivatedBy int64
+	deactivatedID int64
+	customer      application.Customer
 }
 
 type userManagementHTTPStore struct {
@@ -75,12 +78,16 @@ func (s *customerHTTPStore) ListCustomers(context.Context, application.CustomerF
 	return []application.Customer{s.customer}, nil
 }
 func (s *customerHTTPStore) UpdateCustomer(_ context.Context, actorID, customerID int64, customer application.Customer) (application.Customer, error) {
-	s.createdBy = actorID
+	s.updatedBy = actorID
 	customer.ID = customerID
 	s.customer = customer
 	return customer, nil
 }
-func (*customerHTTPStore) DeactivateCustomer(context.Context, int64, int64) error { return nil }
+func (s *customerHTTPStore) DeactivateCustomer(_ context.Context, actorID, customerID int64) error {
+	s.deactivatedBy = actorID
+	s.deactivatedID = customerID
+	return nil
+}
 func (s *testAuthStore) RevokeSession(_ context.Context, hash string) error {
 	if hash != s.hash || s.revoked {
 		return application.ErrInvalidSession
@@ -209,22 +216,39 @@ func TestCustomerCreationRequiresPermissionAndPassesActor(t *testing.T) {
 	if recorder.Code != http.StatusForbidden {
 		t.Fatalf("unauthorized permission status=%d", recorder.Code)
 	}
+	store.permissions = []string{"order.read"}
+	request = httptest.NewRequest(http.MethodPatch, "/v1/customers/9", strings.NewReader(`{"name":"Updated Ana","phone":"0812"}`))
+	request.Header.Set("Authorization", "Bearer "+token)
+	request.Header.Set("Content-Type", "application/json")
+	recorder = httptest.NewRecorder()
+	router.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusForbidden {
+		t.Fatalf("unauthorized customer.update status=%d", recorder.Code)
+	}
 	store.permissions = []string{"customer.update"}
 	request = httptest.NewRequest(http.MethodPatch, "/v1/customers/9", strings.NewReader(`{"name":"Updated Ana","phone":"0812"}`))
 	request.Header.Set("Authorization", "Bearer "+token)
 	request.Header.Set("Content-Type", "application/json")
 	recorder = httptest.NewRecorder()
 	router.ServeHTTP(recorder, request)
-	if recorder.Code != http.StatusOK || customerStore.createdBy != 1 || customerStore.customer.Name != "Updated Ana" {
-		t.Fatalf("customer update status=%d actor=%d customer=%#v body=%s", recorder.Code, customerStore.createdBy, customerStore.customer, recorder.Body.String())
+	if recorder.Code != http.StatusOK || customerStore.updatedBy != 1 || customerStore.customer.Name != "Updated Ana" {
+		t.Fatalf("customer update status=%d actor=%d customer=%#v body=%s", recorder.Code, customerStore.updatedBy, customerStore.customer, recorder.Body.String())
+	}
+	store.permissions = []string{"order.read"}
+	request = httptest.NewRequest(http.MethodDelete, "/v1/customers/9", nil)
+	request.Header.Set("Authorization", "Bearer "+token)
+	recorder = httptest.NewRecorder()
+	router.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusForbidden {
+		t.Fatalf("unauthorized customer.delete status=%d", recorder.Code)
 	}
 	store.permissions = []string{"customer.delete"}
 	request = httptest.NewRequest(http.MethodDelete, "/v1/customers/9", nil)
 	request.Header.Set("Authorization", "Bearer "+token)
 	recorder = httptest.NewRecorder()
 	router.ServeHTTP(recorder, request)
-	if recorder.Code != http.StatusNoContent {
-		t.Fatalf("customer deactivation status=%d body=%s", recorder.Code, recorder.Body.String())
+	if recorder.Code != http.StatusNoContent || customerStore.deactivatedBy != 1 || customerStore.deactivatedID != 9 {
+		t.Fatalf("customer deactivation status=%d actor=%d id=%d body=%s", recorder.Code, customerStore.deactivatedBy, customerStore.deactivatedID, recorder.Body.String())
 	}
 }
 
