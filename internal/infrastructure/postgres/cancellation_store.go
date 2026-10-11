@@ -105,7 +105,7 @@ func (tx *cancellationTransaction) MarkOrderCancelled(ctx context.Context, order
 	if tag.RowsAffected() != 1 {
 		return domain.ErrInvalidOrderTransition
 	}
-	if _, err := tx.tx.Exec(ctx, `INSERT INTO audit_logs(actor_user_id,action,entity_type,entity_id,details) VALUES($1,'order.cancelled','order',$2,jsonb_build_object('order_id',$2::bigint))`, actorID, fmt.Sprint(orderID)); err != nil {
+	if _, err := tx.tx.Exec(ctx, `INSERT INTO audit_logs(actor_user_id,action,entity_type,entity_id,details) VALUES($1,'order.cancelled','order',$2,jsonb_build_object('order_id',$3::bigint))`, actorID, fmt.Sprint(orderID), orderID); err != nil {
 		return fmt.Errorf("audit order cancellation: %w", err)
 	}
 	return nil

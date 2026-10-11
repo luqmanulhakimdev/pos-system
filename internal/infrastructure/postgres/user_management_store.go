@@ -158,7 +158,7 @@ func (s *UserManagementStore) DeactivateManagedUser(ctx context.Context, actorID
 	if _, err := tx.Exec(ctx, "UPDATE user_sessions SET revoked_at=now() WHERE user_id=$1 AND revoked_at IS NULL", userID); err != nil {
 		return fmt.Errorf("revoke deactivated user sessions: %w", err)
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO audit_logs(actor_user_id,action,entity_type,entity_id,details) VALUES($1,'user.deactivated','user',$2,jsonb_build_object('user_id',$2::bigint))`, actorID, fmt.Sprint(userID)); err != nil {
+	if _, err := tx.Exec(ctx, `INSERT INTO audit_logs(actor_user_id,action,entity_type,entity_id,details) VALUES($1,'user.deactivated','user',$2,jsonb_build_object('user_id',$3::bigint))`, actorID, fmt.Sprint(userID), userID); err != nil {
 		return fmt.Errorf("audit user deactivation: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {

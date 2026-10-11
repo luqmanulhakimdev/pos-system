@@ -29,7 +29,7 @@ func (s *CustomerStore) CreateCustomer(ctx context.Context, actorID int64, custo
 		}
 		return application.Customer{}, fmt.Errorf("insert customer: %w", err)
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO audit_logs(actor_user_id,action,entity_type,entity_id,details) VALUES($1,'customer.created','customer',$2,jsonb_build_object('customer_id',$2::bigint))`, actorID, customer.ID); err != nil {
+	if _, err := tx.Exec(ctx, `INSERT INTO audit_logs(actor_user_id,action,entity_type,entity_id,details) VALUES($1,'customer.created','customer',$2,jsonb_build_object('customer_id',$3::bigint))`, actorID, fmt.Sprint(customer.ID), customer.ID); err != nil {
 		return application.Customer{}, fmt.Errorf("audit customer creation: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -79,7 +79,7 @@ func (s *CustomerStore) UpdateCustomer(ctx context.Context, actorID, customerID 
 		}
 		return application.Customer{}, fmt.Errorf("update customer: %w", err)
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO audit_logs(actor_user_id,action,entity_type,entity_id,details) VALUES($1,'customer.updated','customer',$2,jsonb_build_object('customer_id',$2::bigint))`, actorID, customerID); err != nil {
+	if _, err := tx.Exec(ctx, `INSERT INTO audit_logs(actor_user_id,action,entity_type,entity_id,details) VALUES($1,'customer.updated','customer',$2,jsonb_build_object('customer_id',$3::bigint))`, actorID, fmt.Sprint(customerID), customerID); err != nil {
 		return application.Customer{}, fmt.Errorf("audit customer update: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -101,7 +101,7 @@ func (s *CustomerStore) DeactivateCustomer(ctx context.Context, actorID, custome
 	if tag.RowsAffected() == 0 {
 		return application.ErrCustomerNotFound
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO audit_logs(actor_user_id,action,entity_type,entity_id,details) VALUES($1,'customer.deactivated','customer',$2,jsonb_build_object('customer_id',$2::bigint))`, actorID, customerID); err != nil {
+	if _, err := tx.Exec(ctx, `INSERT INTO audit_logs(actor_user_id,action,entity_type,entity_id,details) VALUES($1,'customer.deactivated','customer',$2,jsonb_build_object('customer_id',$3::bigint))`, actorID, fmt.Sprint(customerID), customerID); err != nil {
 		return fmt.Errorf("audit customer deactivation: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
