@@ -1,6 +1,6 @@
 # Entity relationship diagram
 
-The diagram shows the planned core relationships. Exact columns and constraints will be defined by migrations as each domain is implemented.
+The diagram shows the implemented core relationships. Exact columns and constraints are defined by the ordered migrations.
 
 ```mermaid
 erDiagram
@@ -16,5 +16,7 @@ erDiagram
   ORDERS ||--|{ ORDER_ITEMS : contains
   PRODUCTS ||--o{ ORDER_ITEMS : snapshots
   ORDERS ||--o{ PAYMENTS : settles
+  ORDERS ||--o{ REFUNDS : has
+  PAYMENTS ||--o{ REFUNDS : reverses
   USERS ||--o{ AUDIT_LOGS : performs
 ```

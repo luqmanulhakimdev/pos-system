@@ -1,16 +1,76 @@
 package main
 
 import (
- "log"
- "net/http"
- "os"
+	"context"
+	"errors"
+	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/luqmanulhakimdev/pos-system/internal/application"
+	"github.com/luqmanulhakimdev/pos-system/internal/infrastructure/payment"
+	"github.com/luqmanulhakimdev/pos-system/internal/infrastructure/postgres"
+	httpapi "github.com/luqmanulhakimdev/pos-system/internal/interfaces/http"
 )
 
 func main() {
- addr := os.Getenv("HTTP_ADDR")
- if addr == "" { addr = ":8080" }
- mux := http.NewServeMux()
- mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK); _, _ = w.Write([]byte("ok\n")) })
- log.Printf("http server listening on %s", addr)
- log.Fatal(http.ListenAndServe(addr, mux))
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run() error {
+	startupCtx, cancelStartup := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancelStartup()
+	pool, err := postgres.NewPool(startupCtx, os.Getenv("DATABASE_URL"))
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+	if err := postgres.ApplyMigrations(startupCtx, pool); err != nil {
+		return err
+	}
+
+	addr := os.Getenv("HTTP_ADDR")
+	if addr == "" {
+		addr = ":8080"
+	}
+	server := &http.Server{
+		Addr: addr,
+		Handler: httpapi.NewRouter(
+			pool.Ping,
+			application.NewAuthService(postgres.NewAuthStore(pool), 15*time.Minute),
+			application.NewPayments(postgres.NewPaymentStore(pool), payment.NewMockProvider()),
+			application.NewCheckout(postgres.NewCheckoutStore(pool)),
+			application.NewCatalog(postgres.NewCatalogStore(pool)),
+			application.NewInventoryService(postgres.NewCheckoutStore(pool), postgres.NewCatalogStore(pool)),
+			application.NewCustomers(postgres.NewCustomerStore(pool)),
+			application.NewCancelOrder(postgres.NewCancellationStore(pool)),
+			application.NewRefunds(postgres.NewRefundStore(pool), payment.NewMockProvider()),
+			application.NewSalesReports(postgres.NewSalesReportStore(pool)),
+			application.NewOrderQueries(postgres.NewOrderQueryStore(pool)),
+			application.NewUserManagement(postgres.NewUserManagementStore(pool)),
+		),
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+
+	shutdownCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	go func() {
+		<-shutdownCtx.Done()
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := server.Shutdown(ctx); err != nil {
+			log.Printf("graceful shutdown: %v", err)
+		}
+	}()
+
+	log.Printf("http server listening on %s", addr)
+	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return err
+	}
+	return nil
 }
